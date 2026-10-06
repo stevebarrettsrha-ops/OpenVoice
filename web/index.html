@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenVoice Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2300c2a8'/%3E%3Cstop offset='1' stop-color='%237c4dff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%230a0a0c'/%3E%3Cg fill='url(%23g)'%3E%3Crect x='6' y='12' width='2.6' height='8' rx='1.3'/%3E%3Crect x='11' y='7' width='2.6' height='18' rx='1.3'/%3E%3Crect x='16' y='10' width='2.6' height='12' rx='1.3'/%3E%3Crect x='21' y='13' width='2.6' height='6' rx='1.3'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+  :root{
+    --bg:#0a0a0c; --panel:#121215; --panel-2:#17171b; --raised:#1b1b20;
+    --line:#26262c; --line-soft:#1b1b20;
+    --text:#f3f3f4; --muted:#8c8c95; --dim:#5f5f68;
+    --accent:#7c4dff; --accent-2:#00c2a8; --teal:#00c2a8; --blue:#2f7cf6;
+    --ok:#3ddc97; --warn:#ffb020; --err:#ff5a5a;
+    --rail:196px; --work:352px; --player:76px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);overflow:hidden;
+    font-family:Inter,"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button,input,textarea,select{font:inherit;color:inherit}
+  button{cursor:pointer;border:0;background:none}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#2b2b32;border-radius:8px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-track{background:transparent}
+  svg{stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  [hidden]{display:none!important}
+  a{color:#b9a3ff}
+
+  .app{display:grid;grid-template-columns:var(--rail) 1fr var(--work);
+       grid-template-rows:1fr var(--player);height:100vh}
+  .rail{grid-row:1/3;border-right:1px solid var(--line-soft);padding:16px 12px;
+        display:flex;flex-direction:column;gap:3px}
+  .main{overflow-y:auto;border-right:1px solid var(--line-soft)}
+  .work{overflow-y:auto;background:#0b0b0d}
+  .playerbar{grid-column:2/4;border-top:1px solid var(--line-soft);background:#0e0e11;
+             display:flex;align-items:center;gap:14px;padding:0 18px}
+  body.solo .app{grid-template-columns:var(--rail) 1fr}
+  body.solo .work{display:none}
+  body.solo .playerbar{grid-column:2/3}
+
+  .brand{display:flex;align-items:center;gap:9px;padding:6px 10px 18px;
+         font-weight:700;font-size:14px;letter-spacing:.12em}
+  .brand .dot{width:9px;height:9px;border-radius:50%;
+              background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+  .nav{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:10px;
+       color:var(--muted);font-weight:500;width:100%;text-align:left}
+  .nav:hover{background:var(--panel);color:var(--text)}
+  .nav[aria-current="page"]{background:var(--panel-2);color:var(--text)}
+  .nav svg{width:17px;height:17px;flex:none}
+  .nav .tag{margin-left:auto;font-size:10px;padding:2px 6px;border-radius:6px;
+            background:var(--err);color:#fff;font-weight:600}
+  .rail .spacer{flex:1}
+  .statuspill{display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px;
+              color:var(--muted);border-radius:10px;width:100%;text-align:left;line-height:1.3}
+  .statuspill:hover{background:var(--panel)}
+  .statuspill i{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:none}
+  .statuspill.on i{background:var(--ok);box-shadow:0 0 0 3px rgba(61,220,151,.16)}
+  .statuspill.off i{background:var(--err);box-shadow:0 0 0 3px rgba(255,90,90,.14)}
+  .statuspill.busy i{background:var(--warn);box-shadow:0 0 0 3px rgba(255,176,32,.16)}
+
+  .page{padding:22px 26px 120px}
+  h1.big{font-size:30px;line-height:1.2;letter-spacing:-.02em;margin:0 0 18px;text-align:center}
+  h2{font-size:17px;margin:26px 0 10px}
+  .card{background:var(--panel);border:1px solid var(--line-soft);border-radius:14px;
+        margin-bottom:12px;overflow:hidden}
+  .card > summary{display:flex;align-items:center;gap:8px;padding:13px 15px;font-size:13.5px;
+        font-weight:600;color:#dedee2;cursor:pointer;list-style:none}
+  .card > summary::-webkit-details-marker{display:none}
+  .card .chev{width:15px;height:15px;color:var(--dim);transition:transform .18s;flex:none}
+  .card[open] > summary .chev{transform:rotate(90deg)}
+  .card .tools{margin-left:auto;display:flex;gap:4px;align-items:center}
+  .card .body{padding:4px 15px 15px}
+  .iconbtn{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;
+           color:var(--dim);flex:none}
+  .iconbtn:hover{background:#26262d;color:var(--text)}
+  .iconbtn svg{width:15px;height:15px}
+  .iconbtn:disabled{opacity:.4;cursor:not-allowed}
+  .btn{padding:9px 16px;border-radius:10px;background:#232329;font-size:13px;font-weight:500;
+       display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+  .btn:hover{background:#2c2c34}
+  .btn.go{background:linear-gradient(100deg,var(--accent),var(--accent-2));color:#fff}
+  .btn.thin{padding:7px 13px;font-size:12.5px}
+  .btn.danger:hover{background:#3a1f22;color:#ff9a9a}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn svg{width:14px;height:14px}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid currentColor;
+    border-right-color:transparent;border-radius:50%;vertical-align:-2px;
+    animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  .note{font-size:12.5px;color:var(--dim);margin:10px 0 0;line-height:1.55}
+  .note b{color:var(--muted)}
+  .bad-text{color:#ff9a9a}
+  .ok-text{color:var(--ok)}
+  .warn-text{color:var(--warn)}
+  input[type=text],input[type=password],input[type=number],select,textarea{background:#1a1a1f;
+    border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:13px;
+    color:var(--text);width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{resize:vertical}
+  label.check{display:flex;align-items:center;gap:8px;font-size:13px;color:#c9c9d0;cursor:pointer}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .grow{flex:1;min-width:0}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .pill{font-size:11px;padding:2px 8px;border-radius:99px;background:#232329;color:var(--muted)}
+  .pill.ok{background:rgba(61,220,151,.14);color:var(--ok)}
+  .pill.warn{background:rgba(255,176,32,.14);color:var(--warn)}
+  .pill.err{background:rgba(255,90,90,.14);color:#ff9a9a}
+  .pill.v{background:rgba(124,77,255,.16);color:#c7b3ff}
+
+  .chead{display:flex;align-items:center;gap:10px;padding:16px 26px 0;flex-wrap:wrap}
+  .metric{display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;
+          background:var(--panel);border:1px solid var(--line-soft);font-size:12.5px;
+          color:var(--muted)}
+  .segmented{display:inline-flex;background:var(--panel);border:1px solid var(--line-soft);
+             border-radius:999px;padding:3px;gap:2px}
+  .segmented button{padding:6px 15px;border-radius:999px;color:var(--muted);font-size:13px}
+  .segmented button.on{background:#2e2e36;color:var(--text)}
+
+  .blocks{display:flex;flex-direction:column;gap:9px;padding:4px 15px 15px}
+  .blk{background:var(--raised);border:1px solid var(--line);border-radius:11px;
+       position:relative;transition:box-shadow .2s}
+  .blk:hover .bacts{opacity:1}
+  .blk.speaking{box-shadow:0 0 0 1px var(--accent),0 10px 30px -16px var(--accent)}
+  .blk.working{box-shadow:0 0 0 1px var(--teal)}
+  .chip{display:inline-flex;align-items:center;gap:6px;margin:10px 12px 6px;padding:4px 12px;
+        border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;
+        background:rgba(124,77,255,.15);color:#c7b3ff}
+  .chip .cd{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .blk textarea{background:transparent;border:0;padding:0 12px 12px;font-size:13.5px;
+        line-height:1.7;min-height:0;overflow:hidden;border-radius:0}
+  .bacts{position:absolute;top:8px;right:8px;display:flex;gap:3px;opacity:0;transition:opacity .15s}
+  .addblk{width:calc(100% - 30px);margin:0 15px 15px;padding:11px;border-radius:11px;
+    border:1px dashed var(--line);color:var(--dim);font-size:13px;display:flex;
+    align-items:center;justify-content:center;gap:7px}
+  .addblk:hover{border-color:var(--accent);color:#cdbcff}
+
+  .orow{display:flex;align-items:center;gap:12px;margin:0 0 8px;padding:11px 14px;
+        background:var(--raised);border-radius:11px;min-height:48px;flex-wrap:wrap}
+  .orow > .lab{font-size:13px;color:#c9c9d0;display:flex;align-items:center;gap:6px;
+               white-space:nowrap}
+  .orow > .ctl{margin-left:auto;display:flex;align-items:center;gap:10px;min-width:0}
+  .orow select{width:auto;min-width:130px;padding:6px 9px;font-size:12.5px;background:#232329}
+  .slider{display:flex;align-items:center;gap:10px;min-width:180px}
+  .slider input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:22px;
+        background:repeating-linear-gradient(90deg,#33333c 0 1px,transparent 1px 12px)
+        center/100% 12px no-repeat}
+  .slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:5px;height:18px;
+        border-radius:3px;background:var(--teal);cursor:pointer}
+  .slider input[type=range]::-moz-range-thumb{width:5px;height:18px;border:0;border-radius:3px;
+        background:var(--teal);cursor:pointer}
+  .slider .v{font-size:12.5px;color:#c9c9d0;width:52px;text-align:right;
+             font-variant-numeric:tabular-nums}
+
+  .spk{margin:0 0 10px;padding:13px 14px;background:var(--raised);border-radius:11px}
+  .spk .hd{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;margin-bottom:10px}
+  .spk .hd .cd{width:7px;height:7px;border-radius:50%;background:#c7b3ff}
+  .spk .hd input{width:auto;max-width:180px;padding:4px 8px;font-size:13px;background:transparent;
+                 border-color:transparent}
+  .spk .hd input:hover,.spk .hd input:focus{border-color:var(--line);background:#1a1a1f}
+  .fieldrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}
+  .flab{font-size:11.5px;color:var(--muted);margin-bottom:5px;display:block}
+
+  .createbar{position:sticky;bottom:0;z-index:4;display:flex;gap:10px;align-items:center;
+             padding:14px 26px 18px;background:var(--bg);box-shadow:0 -20px 22px -6px var(--bg)}
+  .primary{flex:1;padding:13px 20px;border-radius:12px;font-weight:600;font-size:14.5px;
+           display:flex;align-items:center;justify-content:center;gap:9px;
+           background:linear-gradient(100deg,var(--accent),var(--accent-2));color:#fff;
+           box-shadow:0 8px 26px -14px rgba(124,77,255,.95)}
+  .primary:disabled{opacity:.4;box-shadow:none;cursor:not-allowed}
+  .primary.working:disabled{opacity:.85;cursor:progress}
+  .stopbtn{padding:13px 18px;border-radius:12px;background:var(--panel);
+           border:1px solid var(--line);color:var(--muted);font-size:13.5px}
+  .stopbtn:hover{border-color:var(--err);color:#ff9a9a}
+
+  .hero{max-width:680px;margin:40px auto 0}
+  .promptbox{background:var(--panel-2);border:1px solid var(--line);border-radius:16px;
+             padding:16px 16px 12px;box-shadow:0 30px 70px -50px var(--accent)}
+  .promptbox textarea{background:transparent;border:0;padding:0;min-height:72px;font-size:15px}
+  .promptbox .row{margin-top:8px}
+  .promptbox select{width:auto;max-width:200px;padding:6px 9px;font-size:12.5px;background:#232329}
+  .banner{max-width:760px;margin:30px auto 0;border-radius:16px;padding:24px 28px;
+          background:linear-gradient(115deg,#12324a,#2c1257 55%,#6b1f7c)}
+  .banner h3{margin:0 0 6px;font-size:17px}
+  .banner p{margin:0 0 16px;color:#e4dcf0;font-size:13.5px;max-width:60ch}
+  .banner .btn{background:#fff;color:#1a1a1f}
+  .rowhead{display:flex;align-items:center;gap:12px;margin:30px 0 12px;font-size:15px;font-weight:600}
+  .rowhead .btn,.rowhead input{margin-left:auto}
+  .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+  .gcard{background:var(--panel);border:1px solid var(--line-soft);border-radius:13px;
+         padding:12px;text-align:left;position:relative}
+  .gcard:hover{border-color:#32323b}
+  .gcard .t{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gcard .s{font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .gcard .acts{display:flex;gap:2px;margin-top:8px}
+  .wave{height:46px;border-radius:8px;background:linear-gradient(135deg,rgba(124,77,255,.25),rgba(0,194,168,.2));
+        display:flex;align-items:center;justify-content:center;gap:3px;margin-bottom:9px;cursor:pointer}
+  .wave i{display:block;width:3px;border-radius:2px;background:rgba(255,255,255,.7)}
+
+  .workhead{position:sticky;top:0;background:#0b0b0d;padding:16px 14px 10px;z-index:2;
+            border-bottom:1px solid var(--line-soft)}
+  .crumb{font-size:13px;color:var(--muted);margin-bottom:8px}
+  .crumb b{color:var(--text);font-weight:500}
+  .prog{height:6px;border-radius:4px;background:#1f1f25;overflow:hidden;margin:8px 0 4px}
+  .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+          transition:width .3s;width:0}
+  .tracks{padding:8px;display:flex;flex-direction:column;gap:2px}
+  .trow{display:flex;gap:11px;padding:8px;border-radius:12px;align-items:flex-start}
+  .trow:hover{background:#151519}
+  .trow.active{background:#1a1a20}
+  .art{position:relative;border-radius:9px;overflow:hidden;flex:none;width:52px;height:52px;cursor:pointer;
+       background:linear-gradient(135deg,#2c1a5e,#0f3d3a);display:grid;place-items:center}
+  .art svg{width:20px;height:20px;fill:#fff;stroke:none;opacity:.85}
+  .art .dur{position:absolute;left:3px;bottom:3px;font-size:9.5px;padding:1px 4px;border-radius:5px;
+            background:rgba(0,0,0,.66);color:#fff;font-variant-numeric:tabular-nums}
+  .tmeta{min-width:0;flex:1}
+  .tmeta .t{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .tmeta .s{font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .tacts{display:flex;gap:1px;margin-top:4px}
+  .tacts .iconbtn{width:24px;height:24px}
+  .tacts .iconbtn svg{width:13px;height:13px}
+  .empty{padding:32px 18px;text-align:center;color:var(--dim);font-size:13px}
+  .empty b{display:block;color:var(--muted);font-size:13.5px;margin-bottom:6px}
+
+  .dep{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;background:var(--raised);
+       border-radius:11px;margin-bottom:8px}
+  .dep .st{width:9px;height:9px;border-radius:50%;margin-top:7px;flex:none;background:var(--dim)}
+  .dep .st.ok{background:var(--ok)} .dep .st.missing{background:var(--err)}
+  .dep .st.warn{background:var(--warn)} .dep .st.error{background:var(--err)}
+  .dep .nm{font-size:13.5px;font-weight:500}
+  .dep .dt{font-size:12px;color:var(--muted);line-height:1.5;word-break:break-word}
+  .dep .act{margin-left:auto;display:flex;gap:6px;align-items:center;flex:none}
+  .console{background:#0d0d10;border:1px solid var(--line-soft);border-radius:11px;padding:11px 12px;
+           font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:#9a9aa4;
+           line-height:1.6;white-space:pre-wrap;height:300px;overflow-y:auto;word-break:break-word}
+  .steps{display:flex;flex-direction:column;gap:4px;margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  .steps div{display:flex;gap:10px}
+  .steps .k{width:42px;flex:none;font-weight:600}
+  .gpu{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+  .stat{background:var(--raised);border-radius:11px;padding:11px 13px}
+  .stat .l{font-size:11px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+  .stat .v{font-size:15px;font-weight:600;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stat .s{font-size:11.5px;color:var(--muted)}
+  .mcard{display:flex;gap:14px;padding:14px;background:var(--raised);border-radius:12px;margin-bottom:10px;align-items:flex-start}
+  .mcard .ic{width:44px;height:44px;border-radius:11px;flex:none;display:grid;place-items:center;
+             background:linear-gradient(135deg,#2c1a5e,#0f3d3a);font-weight:700;font-size:13px}
+  .mcard .nm{font-size:14px;font-weight:600}
+  .mcard .ab{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+  .mcard .acts{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;align-items:center}
+
+  .playerbar .pbtn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--text)}
+  .playerbar .pbtn:hover{background:#1c1c21}
+  .playerbar .pbtn.main{background:#fff;color:#000;width:38px;height:38px}
+  .playerbar .pbtn svg{width:16px;height:16px;fill:currentColor;stroke:none}
+  .playerbar .ttl{min-width:0;flex:1}
+  .playerbar .ttl .t{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .playerbar .ttl .s{font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .playerbar .seek{flex:2;display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--dim);
+                   font-variant-numeric:tabular-nums}
+  .playerbar .seek input{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#2b2b32}
+  .playerbar .seek input::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#fff}
+  .playerbar .seek input::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:#fff}
+
+  #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#232329;color:#fff;
+         padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;max-width:70vw;
+         box-shadow:0 10px 30px -10px #000;border:1px solid var(--line)}
+  #toast.bad{background:#3a1f22;border-color:#5a2a2f}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:40}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;width:min(560px,92vw)}
+  .modal h3{margin:0 0 10px;font-size:16px}
+  @media (max-width:1100px){ .app{grid-template-columns:var(--rail) 1fr} .work{display:none} .playerbar{grid-column:2/3} }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><span class="dot"></span>OPENVOICE</div>
+    <button class="nav" data-view="home" aria-current="page">
+      <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+    <button class="nav" data-view="create">
+      <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>Create</button>
+    <button class="nav" data-view="voices">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Voices</button>
+    <button class="nav" data-view="library">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</button>
+    <button class="nav" data-view="models">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>Models<span class="tag" id="modelsTag" hidden>!</span></button>
+    <button class="nav" data-view="engine">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Engine<span class="tag" id="engineTag" hidden>!</span></button>
+    <div class="spacer"></div>
+    <button class="statuspill" id="enginePill" data-view="engine"><i></i><span id="enginePillText">Engine</span></button>
+    <button class="statuspill" id="gpuPill" data-view="engine"><i></i><span id="gpuPillText">GPU</span></button>
+  </aside>
+
+  <main class="main" id="main">
+    <!-- ================= HOME ================= -->
+    <section class="page" data-page="home">
+      <div class="hero">
+        <h1 class="big">Say it in any voice.</h1>
+        <div class="promptbox">
+          <textarea id="homeText" placeholder="Type a line, or paste a script with speaker names like  Anna: Hello there.">Did you ever hear a folk tale about a giant turtle?</textarea>
+          <div class="row">
+            <select id="homeVoice" title="Voice to clone"></select>
+            <select id="homeBase" title="Base language / accent"></select>
+            <button class="btn go" id="homeRead" style="margin-left:auto">
+              <svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg>Read it</button>
+          </div>
+        </div>
+        <p class="note" style="text-align:center">OpenVoice clones the <b>tone colour</b> of a reference clip and speaks your text with it. Accent and emotion come from the base voice you pick, not from the clip.</p>
+      </div>
+      <div class="banner" id="setupBanner" hidden>
+        <h3 id="setupTitle">A few things to set up first</h3>
+        <p id="setupText">PyTorch and the OpenVoice checkpoints are not here yet. The Engine page installs them into this app's own environment, one button each.</p>
+        <button class="btn" data-view="engine">Open the Engine page</button>
+      </div>
+      <div class="rowhead">Recent takes <button class="btn thin" data-view="library">Library</button></div>
+      <div class="grid-cards" id="homeTakes"></div>
+    </section>
+
+    <!-- ================= CREATE ================= -->
+    <section data-page="create" hidden>
+      <div class="chead">
+        <div class="metric"><span id="mLines">0 lines</span></div>
+        <div class="metric"><span id="mChars">0 characters</span></div>
+        <div class="segmented" id="versionSeg">
+          <button data-v="v2" class="on">V2 · MeloTTS voices</button>
+          <button data-v="v1">V1 · emotion styles</button>
+        </div>
+        <button class="btn thin" id="pasteScript" style="margin-left:auto">
+          <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Paste a script</button>
+      </div>
+      <div class="page" style="padding-top:14px">
+        <details class="card" open>
+          <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Script
+            <div class="tools"><button class="iconbtn" id="clearScript" title="Clear"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div></summary>
+          <div class="blocks" id="blocks"></div>
+          <button class="addblk" id="addBlock"><svg viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 5v14M5 12h14"/></svg>Add a line</button>
+        </details>
+
+        <details class="card" open>
+          <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Speakers
+            <div class="tools"><button class="btn thin" id="addSpeaker">Add speaker</button></div></summary>
+          <div class="body" id="speakers"></div>
+          <p class="note" style="padding:0 15px 15px;margin:0">Each speaker gets a <b>voice</b> (a clip from the Voices page, or none to keep the base voice) and a <b>base</b>: the language and accent on V2, the language and emotion on V1. Lines are read by the base voice first, then converted to the clip's tone colour.</p>
+        </details>
+
+        <details class="card">
+          <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>More options</summary>
+          <div class="body">
+            <div class="orow"><div class="lab">Pause between lines</div>
+              <div class="ctl"><div class="slider"><input type="range" id="optPause" min="0" max="2" step="0.05" value="0.35"><span class="v" id="optPauseV">0.35 s</span></div></div></div>
+            <div class="orow"><div class="lab">Cloning strength (tau)</div>
+              <div class="ctl"><div class="slider"><input type="range" id="optTau" min="0.1" max="1" step="0.05" value="0.3"><span class="v" id="optTauV">0.30</span></div></div></div>
+            <div class="orow"><div class="lab">Free GPU memory after each take</div>
+              <div class="ctl"><label class="check"><input type="checkbox" id="optFree"> drop the models so the card is free between takes</label></div></div>
+            <div class="orow"><div class="lab">Watermark</div>
+              <div class="ctl"><label class="check"><input type="checkbox" id="optWm"> add MyShell's inaudible watermark (needs wavmark)</label></div></div>
+            <div class="orow"><div class="lab">Take title</div>
+              <div class="ctl"><input type="text" id="optTitle" placeholder="first line, if empty" style="width:260px"></div></div>
+          </div>
+        </details>
+      </div>
+      <div class="createbar">
+        <button class="primary" id="runBtn"><svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M5 3l14 9-14 9z"/></svg><span id="runLabel">Read the script</span></button>
+        <button class="stopbtn" id="stopBtn" hidden>Stop</button>
+      </div>
+    </section>
+
+    <!-- ================= VOICES ================= -->
+    <section class="page" data-page="voices" hidden>
+      <h1 class="big" style="text-align:left;font-size:24px">Voices</h1>
+      <details class="card" open>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Add a voice from a clip</summary>
+        <div class="body">
+          <div class="row">
+            <input type="file" id="voiceFile" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a" style="width:auto">
+            <input type="text" id="voiceName" placeholder="Name (defaults to the file name)" style="width:260px">
+            <button class="btn go" id="voiceAdd">Add voice</button>
+          </div>
+          <p class="note">A clean clip of <b>one person</b>, 5 to 30 seconds, no music and no long silences, makes the best voice. The clip's language does not matter. The tone-colour embedding is worked out once, the first time the voice is used, and cached. Upstream has a <a href="https://github.com/myshell-ai/OpenVoice/blob/main/docs/QA.md" target="_blank" rel="noopener">QnA</a> on clips that do not clone well.</p>
+        </div>
+      </details>
+      <div class="grid-cards" id="voiceCards"></div>
+      <div class="empty" id="voicesEmpty" hidden><b>No voices yet</b>Add a clip above. Until then, every speaker uses the base voice as it is.</div>
+    </section>
+
+    <!-- ================= LIBRARY ================= -->
+    <section class="page" data-page="library" hidden>
+      <div class="rowhead" style="margin-top:0">Library <input type="text" id="libFilter" placeholder="Filter" style="width:220px"></div>
+      <div class="grid-cards" id="libCards"></div>
+      <div class="empty" id="libEmpty" hidden><b>Nothing here yet</b>Takes you read on the Create page land here.</div>
+    </section>
+
+    <!-- ================= MODELS ================= -->
+    <section class="page" data-page="models" hidden>
+      <h1 class="big" style="text-align:left;font-size:24px">Models</h1>
+      <div id="modelCards"></div>
+      <details class="card">
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Where the files come from</summary>
+        <div class="body">
+          <p class="note" style="margin:4px 0 12px">The S3 bucket upstream's README links (<span class="mono">myshell-public-repo-host</span>) is gone, so checkpoints are fetched file by file from HuggingFace, with resume. A mirror or token can be set here; a zip URL, if you have one, is tried first.</p>
+          <div class="fieldrow">
+            <div><span class="flab">HuggingFace endpoint</span><input type="text" id="hfEndpoint" placeholder="https://huggingface.co"></div>
+            <div><span class="flab">Token (only for gated repos)</span><input type="password" id="hfToken" placeholder="hf_…"></div>
+          </div>
+          <div class="fieldrow" style="margin-top:9px">
+            <div><span class="flab">Zip URL for V2 (optional)</span><input type="text" id="zipV2" placeholder="https://…/checkpoints_v2_0417.zip"></div>
+            <div><span class="flab">Zip URL for V1 (optional)</span><input type="text" id="zipV1" placeholder="https://…/checkpoints_1226.zip"></div>
+          </div>
+          <div class="row" style="margin-top:10px"><button class="btn" id="hfSave">Save</button><span class="note" style="margin:0" id="hfSaved"></span></div>
+        </div>
+      </details>
+      <details class="card" id="taskCard" open>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Activity
+          <div class="tools"><span class="pill" id="taskPill" hidden></span><button class="btn thin danger" id="taskCancel" hidden>Cancel</button></div></summary>
+        <div class="body">
+          <div class="prog" id="taskProg" hidden><i></i></div>
+          <div class="note" id="taskDetail" style="margin:0 0 8px"></div>
+          <div class="console" id="taskLog" style="height:220px">Nothing running.</div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ================= ENGINE ================= -->
+    <section class="page" data-page="engine" hidden>
+      <h1 class="big" style="text-align:left;font-size:24px">Engine</h1>
+      <div class="gpu" id="gpuStats"></div>
+      <div class="note" id="fitNote" style="margin:-4px 0 14px"></div>
+
+      <details class="card" open>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Dependencies
+          <div class="tools"><button class="btn thin" id="installAll">Install everything missing</button>
+            <button class="iconbtn" id="depsRefresh" title="Check again"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg></button></div></summary>
+        <div class="body" id="deps"></div>
+      </details>
+
+      <details class="card" open>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Engine process
+          <div class="tools">
+            <span class="pill" id="engState">stopped</span>
+            <button class="btn thin" id="engStart">Start</button>
+            <button class="btn thin" id="engRestart">Restart</button>
+            <button class="btn thin" id="engStop">Stop</button>
+            <button class="btn thin" id="engFree" title="Drop the loaded models from the card, keep the process">Free GPU memory</button>
+          </div></summary>
+        <div class="body">
+          <div class="row" style="margin-bottom:10px">
+            <span class="note" style="margin:0">Device</span>
+            <select id="cfgDevice" style="width:auto"><option value="auto">Auto (card if PyTorch sees one)</option><option value="cuda">NVIDIA card</option><option value="cpu">CPU only</option></select>
+            <span class="note" style="margin:0" id="engHello"></span>
+          </div>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn" id="selfV2">Test V2</button>
+            <button class="btn" id="selfV1">Test V1</button>
+            <button class="btn thin" id="selfPlay" hidden>Play the test line</button>
+            <span class="note" style="margin:0">Reads one line on this machine and reports every step, so "it does not work" has a place to point.</span>
+          </div>
+          <div class="steps" id="selfSteps"></div>
+          <div class="console" id="engConsole" style="margin-top:12px">The engine has not started.</div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <aside class="work" id="work">
+    <div class="workhead">
+      <div class="crumb" id="workCrumb"><b>Workspace</b></div>
+      <div id="jobBox" hidden>
+        <div class="row" style="justify-content:space-between"><span id="jobMsg" style="font-size:12.5px;color:var(--muted)">—</span><button class="btn thin danger" id="jobCancel">Cancel</button></div>
+        <div class="prog"><i id="jobBar"></i></div>
+      </div>
+      <div class="note" id="workNote" style="margin:4px 0 0">Takes appear here as they finish. Click one to play it; ⏮ ⏭ in the player step through its lines.</div>
+    </div>
+    <div class="tracks" id="tracks"></div>
+  </aside>
+
+  <div class="playerbar">
+    <button class="pbtn" id="pPrev" title="Previous line"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM18 5l-9 7 9 7z"/></svg></button>
+    <button class="pbtn main" id="pPlay" title="Play / pause"><svg viewBox="0 0 24 24" id="pPlayIcon"><path d="M7 4l13 8-13 8z"/></svg></button>
+    <button class="pbtn" id="pNext" title="Next line"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM6 5l9 7-9 7z"/></svg></button>
+    <div class="ttl"><div class="t" id="pTitle">Nothing playing</div><div class="s" id="pSub">—</div></div>
+    <div class="seek"><span id="pCur">0:00</span><input type="range" id="pSeek" min="0" max="1000" value="0"><span id="pDur">0:00</span></div>
+    <button class="pbtn" id="pDown" title="Download"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3.5-3.5 1.4 1.4L12 16.8 6.1 10.9l1.4-1.4L11 13zM4 18h16v2H4z"/></svg></button>
+  </div>
+</div>
+<div id="toast" hidden></div>
+<div class="modal" id="pasteModal" hidden>
+  <div class="box">
+    <h3>Paste a script</h3>
+    <textarea id="pasteText" rows="10" placeholder="Anna: Did you ever hear a folk tale about a giant turtle?&#10;Ben: I did not. Tell me.&#10;&#10;Lines without a name join the one above."></textarea>
+    <div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn" id="pasteClose">Cancel</button><button class="btn go" id="pasteGo">Use it</button></div>
+  </div>
+</div>
+<audio id="player"></audio>
+
+<script>
+"use strict";
+
+/* ========================= faults ========================= */
+(function () {
+  var shown = 0;
+  function report(what, detail) {
+    if (shown >= 3) return;
+    shown++;
+    try {
+      if (typeof toast === "function") { toast(what + ": " + detail, true); return; }
+      var el = document.getElementById("toast");
+      if (el) { el.textContent = what + ": " + detail; el.classList.add("bad"); el.hidden = false; }
+    } catch (e) { /* never */ }
+  }
+  window.addEventListener("error", function (e) { report("Something went wrong", (e && e.message) || "script error"); });
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e && e.reason; report("A request failed", (r && (r.message || r)) || "unknown"); });
+})();
+
+/* ========================= state ========================= */
+var S = {
+  view: "home", version: "v2",
+  blocks: [], speakers: [],          // blocks: {speaker, text}; speakers: {name, voice, language, speaker, style, speed}
+  voices: [], bases: { v1: {}, v2: {} }, takes: [], status: null, deps: [], builds: [],
+  job: null, task: null, taskCursor: 0, engCursor: 0, engLines: [], selftest: null,
+  play: { take: null, line: -1, token: 0 }, libFilter: ""
+};
+function $(id) { return document.getElementById(id); }
+async function api(path, opts) {
+  var r = await fetch(path, opts), b = null;
+  try { b = await r.json(); } catch (e) { b = null; }
+  if (!r.ok) throw new Error((b && b.error) || ("Request failed: " + r.status));
+  return b;
+}
+function post(path, body) {
+  return api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+}
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+}
+function fmtTime(s) { if (!isFinite(s) || s < 0) s = 0; return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); }
+function fmtSize(b) { if (!b) return "—"; if (b >= 1e9) return (b / 1e9).toFixed(2) + " GB"; if (b >= 1e6) return (b / 1e6).toFixed(0) + " MB"; return (b / 1e3).toFixed(0) + " KB"; }
+function fmtDate(t) { try { return new Date(t * 1000).toLocaleString(); } catch (e) { return ""; } }
+var toastTimer = null;
+function toast(msg, bad) {
+  var t = $("toast"); t.textContent = msg; t.classList.toggle("bad", !!bad); t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.hidden = true; }, bad ? 8000 : 3500);
+}
+function store(k, v) {
+  try { if (v === undefined) return JSON.parse(localStorage.getItem(k)); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; }
+}
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+/* ========================= navigation ========================= */
+function show(view) {
+  S.view = view;
+  document.querySelectorAll("[data-page]").forEach(function (p) { p.hidden = p.getAttribute("data-page") !== view; });
+  document.querySelectorAll(".nav").forEach(function (n) {
+    if (n.getAttribute("data-view") === view) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current"); });
+  document.body.classList.toggle("solo", view !== "create" && view !== "home");
+  $("main").scrollTop = 0;
+  if (view === "engine") { loadDeps(false); pollEngine(); }
+  if (view === "models") { loadModels(); }
+  if (view === "voices") { loadVoices(); }
+  if (view === "library") { renderLibrary(); }
+  if (view === "home") { renderHome(); }
+  store("ov.view", view);
+}
+document.addEventListener("click", function (e) {
+  var b = e.target.closest("[data-view]");
+  if (b) show(b.getAttribute("data-view"));
+});
+
+/* ========================= status ========================= */
+async function loadStatus(fast) {
+  try { S.status = await api("/api/status" + (fast ? "?fast=1" : "")); } catch (e) { return; }
+  var st = S.status, eng = st.engine || {}, pill = $("enginePill");
+  pill.className = "statuspill " + (eng.state === "ready" ? (st.jobs_running ? "busy" : "on") : (eng.state === "error" ? "off" : ""));
+  $("enginePillText").textContent = eng.state === "ready" ? (st.jobs_running ? "Engine · reading" : "Engine · ready")
+    : eng.state === "starting" ? "Engine · starting" : eng.state === "error" ? "Engine · error" : "Engine · stopped";
+  var g = st.gpu || {};
+  $("gpuPill").className = "statuspill " + (g.present ? "on" : "");
+  $("gpuPillText").textContent = g.present ? (g.name || "GPU") + " · " + fmtSize(g.vram_total) : "No NVIDIA card found";
+  var anyModel = Object.keys(st.models || {}).some(function (k) { return st.models[k].present; });
+  $("modelsTag").hidden = anyModel;
+  $("engineTag").hidden = !!(st.torch && st.torch.installed && !st.torch.error);
+  $("setupBanner").hidden = !!st.ready;
+  if (!st.ready) {
+    var missing = [];
+    if (!(st.torch && st.torch.installed)) missing.push("PyTorch");
+    if (!anyModel) missing.push("the OpenVoice checkpoints");
+    $("setupText").textContent = (missing.length ? missing.join(" and ") + (missing.length > 1 ? " are" : " is") + " not here yet. " : "") +
+      "The Engine page installs what is missing into this app's own environment, one button each; the Models page fetches the checkpoints.";
+  }
+  if (st.config && !S._cfgApplied) {
+    S._cfgApplied = true;
+    S.version = st.config.version || "v2";
+    $("optPause").value = st.config.pause; $("optPauseV").textContent = Number(st.config.pause).toFixed(2) + " s";
+    $("optTau").value = st.config.tau; $("optTauV").textContent = Number(st.config.tau).toFixed(2);
+    $("optFree").checked = !!st.config.free_after; $("optWm").checked = !!st.config.watermark;
+    $("cfgDevice").value = st.config.device || "auto";
+    renderVersion();
+  }
+  renderEngineStats();
+}
+
+/* ========================= bases / voices ========================= */
+async function loadBases() { try { S.bases = await api("/api/bases"); } catch (e) { /* keep */ } renderSpeakers(); renderHomeSelects(); }
+async function loadVoices() {
+  try { S.voices = (await api("/api/voices")).voices || []; } catch (e) { S.voices = []; }
+  renderVoices(); renderSpeakers(); renderHomeSelects();
+}
+function baseOptions(version) {
+  // [{value, label}] for one <select>: V2 = language+accent; V1 = language+style
+  var out = [], b = S.bases[version] || {};
+  Object.keys(b).forEach(function (lang) {
+    var info = b[lang];
+    if (version === "v2") {
+      (info.speakers || []).forEach(function (sp) {
+        out.push({ value: lang + "|" + sp.key, label: info.label + (sp.label !== info.label ? " · " + sp.label : "") + (sp.ready ? "" : " (not downloaded)") });
+      });
+    } else {
+      (info.styles || []).forEach(function (sty) {
+        out.push({ value: lang + "|" + sty, label: info.label + " · " + sty + (info.ready ? "" : " (not downloaded)") });
+      });
+    }
+  });
+  return out;
+}
+function baseFromValue(version, v) {
+  var p = String(v || "").split("|");
+  return version === "v2" ? { language: p[0] || "EN", speaker: p[1] || "EN-Default" } : { language: p[0] || "EN", style: p[1] || "default" };
+}
+function renderHomeSelects() {
+  var hv = $("homeVoice"), cur = hv.value;
+  hv.innerHTML = '<option value="">Base voice only (no cloning)</option>' + S.voices.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.name) + "</option>"; }).join("");
+  if ([].some.call(hv.options, function (o) { return o.value === cur; })) hv.value = cur;
+  else if (S.voices.length) hv.value = S.voices[0].id;
+  var hb = $("homeBase"), curb = hb.value;
+  hb.innerHTML = baseOptions(S.version).map(function (o) { return '<option value="' + esc(o.value) + '">' + esc(o.label) + "</option>"; }).join("");
+  if ([].some.call(hb.options, function (o) { return o.value === curb; })) hb.value = curb;
+}
+
+/* ========================= script (create page) ========================= */
+function defaultSpeaker(name) {
+  return { name: name, voice: S.voices.length ? S.voices[0].id : "", language: "EN", speaker: "EN-Default", style: "default", speed: 1.0 };
+}
+function ensureSpeakers() {
+  if (!S.speakers.length) S.speakers.push(defaultSpeaker("Speaker 1"));
+  S.blocks.forEach(function (b) {
+    if (!S.speakers.some(function (s) { return s.name === b.speaker; })) {
+      if (!b.speaker) b.speaker = S.speakers[0].name;
+      else S.speakers.push(defaultSpeaker(b.speaker));
+    }
+  });
+}
+function saveScript() { store("ov.script", { blocks: S.blocks, speakers: S.speakers, version: S.version }); }
+function loadScript() {
+  var s = store("ov.script");
+  if (s && s.blocks) { S.blocks = s.blocks; S.speakers = s.speakers || []; if (s.version) S.version = s.version; }
+  if (!S.blocks.length) S.blocks = [{ speaker: "Speaker 1", text: "Did you ever hear a folk tale about a giant turtle?" }];
+  ensureSpeakers();
+}
+function renderVersion() {
+  document.querySelectorAll("#versionSeg button").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-v") === S.version); });
+  renderSpeakers(); renderHomeSelects();
+}
+function autosize(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
+function renderBlocks() {
+  ensureSpeakers();
+  var host = $("blocks"); host.innerHTML = "";
+  S.blocks.forEach(function (b, i) {
+    var el = document.createElement("div"); el.className = "blk"; el.dataset.i = i;
+    el.innerHTML = '<span class="chip" title="Click to change the speaker"><i class="cd"></i>' + esc(b.speaker) + "</span>" +
+      '<div class="bacts">' +
+      '<button class="iconbtn" data-act="up" title="Move up"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>' +
+      '<button class="iconbtn" data-act="down" title="Move down"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>' +
+      '<button class="iconbtn" data-act="del" title="Delete"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>' +
+      '<textarea rows="1" placeholder="What is said">' + esc(b.text) + "</textarea>";
+    host.appendChild(el);
+    var ta = el.querySelector("textarea"); autosize(ta);
+    ta.addEventListener("input", function () { b.text = ta.value; autosize(ta); metrics(); saveScript(); });
+    el.querySelector(".chip").addEventListener("click", function () {
+      var idx = S.speakers.findIndex(function (s) { return s.name === b.speaker; });
+      b.speaker = S.speakers[(idx + 1) % S.speakers.length].name; renderBlocks(); saveScript();
+    });
+    el.querySelectorAll("[data-act]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var a = btn.getAttribute("data-act");
+        if (a === "del") S.blocks.splice(i, 1);
+        if (a === "up" && i > 0) { S.blocks.splice(i - 1, 0, S.blocks.splice(i, 1)[0]); }
+        if (a === "down" && i < S.blocks.length - 1) { S.blocks.splice(i + 1, 0, S.blocks.splice(i, 1)[0]); }
+        if (!S.blocks.length) S.blocks.push({ speaker: S.speakers[0].name, text: "" });
+        renderBlocks(); saveScript();
+      });
+    });
+  });
+  metrics();
+}
+function metrics() {
+  var n = S.blocks.filter(function (b) { return b.text.trim(); }).length;
+  var c = S.blocks.reduce(function (a, b) { return a + b.text.length; }, 0);
+  $("mLines").textContent = n + (n === 1 ? " line" : " lines");
+  $("mChars").textContent = c + " characters";
+}
+function renderSpeakers() {
+  ensureSpeakers();
+  var host = $("speakers"); host.innerHTML = "";
+  var opts = baseOptions(S.version);
+  S.speakers.forEach(function (sp, i) {
+    var el = document.createElement("div"); el.className = "spk";
+    var val = S.version === "v2" ? sp.language + "|" + sp.speaker : sp.language + "|" + sp.style;
+    if (!opts.some(function (o) { return o.value === val; }) && opts.length) {
+      val = opts[0].value; var bf = baseFromValue(S.version, val); sp.language = bf.language;
+      if (S.version === "v2") sp.speaker = bf.speaker; else sp.style = bf.style;
+    }
+    el.innerHTML = '<div class="hd"><span class="cd"></span><input type="text" value="' + esc(sp.name) + '" title="Speaker name">' +
+      (S.speakers.length > 1 ? '<button class="iconbtn" data-act="del" title="Remove speaker" style="margin-left:auto"><svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>' : "") + "</div>" +
+      '<div class="fieldrow">' +
+      '<div><span class="flab">Voice (tone colour)</span><select data-f="voice"><option value="">Base voice only</option>' +
+      S.voices.map(function (v) { return '<option value="' + esc(v.id) + '"' + (v.id === sp.voice ? " selected" : "") + ">" + esc(v.name) + "</option>"; }).join("") + "</select></div>" +
+      '<div><span class="flab">' + (S.version === "v2" ? "Base language · accent" : "Base language · emotion") + '</span><select data-f="base">' +
+      opts.map(function (o) { return '<option value="' + esc(o.value) + '"' + (o.value === val ? " selected" : "") + ">" + esc(o.label) + "</option>"; }).join("") + "</select></div>" +
+      '<div><span class="flab">Speed <span class="mono" data-f="speedv">' + Number(sp.speed).toFixed(2) + 'x</span></span><input type="range" data-f="speed" min="0.5" max="1.5" step="0.05" value="' + sp.speed + '" style="width:100%"></div>' +
+      "</div>";
+    host.appendChild(el);
+    var nameIn = el.querySelector(".hd input");
+    nameIn.addEventListener("change", function () {
+      var nn = nameIn.value.trim().slice(0, 40) || sp.name;
+      if (nn !== sp.name && S.speakers.some(function (o) { return o.name === nn; })) { toast("There is already a speaker called " + nn, true); nameIn.value = sp.name; return; }
+      S.blocks.forEach(function (b) { if (b.speaker === sp.name) b.speaker = nn; });
+      sp.name = nn; renderBlocks(); renderSpeakers(); saveScript();
+    });
+    el.querySelector('[data-f="voice"]').addEventListener("change", function (e) { sp.voice = e.target.value; saveScript(); });
+    el.querySelector('[data-f="base"]').addEventListener("change", function (e) {
+      var bf = baseFromValue(S.version, e.target.value); sp.language = bf.language;
+      if (S.version === "v2") sp.speaker = bf.speaker; else sp.style = bf.style; saveScript();
+    });
+    el.querySelector('[data-f="speed"]').addEventListener("input", function (e) {
+      sp.speed = Number(e.target.value); el.querySelector('[data-f="speedv"]').textContent = sp.speed.toFixed(2) + "x"; saveScript(); });
+    var del = el.querySelector('[data-act="del"]');
+    if (del) del.addEventListener("click", function () {
+      var fallback = S.speakers[i === 0 ? 1 : 0].name;
+      S.blocks.forEach(function (b) { if (b.speaker === sp.name) b.speaker = fallback; });
+      S.speakers.splice(i, 1); renderBlocks(); renderSpeakers(); saveScript();
+    });
+  });
+}
+$("addBlock").addEventListener("click", function () {
+  var last = S.blocks[S.blocks.length - 1];
+  var idx = last ? S.speakers.findIndex(function (s) { return s.name === last.speaker; }) : 0;
+  var next = S.speakers.length > 1 ? S.speakers[(idx + 1) % S.speakers.length].name : S.speakers[0].name;
+  S.blocks.push({ speaker: next, text: "" }); renderBlocks(); saveScript();
+  var tas = $("blocks").querySelectorAll("textarea"); tas[tas.length - 1].focus();
+});
+$("addSpeaker").addEventListener("click", function () {
+  var n = S.speakers.length + 1, name = "Speaker " + n;
+  while (S.speakers.some(function (s) { return s.name === name; })) { n++; name = "Speaker " + n; }
+  S.speakers.push(defaultSpeaker(name)); renderSpeakers(); saveScript();
+});
+$("clearScript").addEventListener("click", function () {
+  S.blocks = [{ speaker: S.speakers[0].name, text: "" }]; renderBlocks(); saveScript();
+});
+document.querySelectorAll("#versionSeg button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    S.version = b.getAttribute("data-v"); renderVersion(); saveScript();
+    post("/api/config", { version: S.version }).catch(function () {});
+  });
+});
+$("pasteScript").addEventListener("click", function () { $("pasteModal").hidden = false; $("pasteText").focus(); });
+$("pasteClose").addEventListener("click", function () { $("pasteModal").hidden = true; });
+$("pasteGo").addEventListener("click", async function () {
+  var text = $("pasteText").value;
+  if (!text.trim()) { $("pasteModal").hidden = true; return; }
+  var r = await post("/api/parse", { text: text });
+  applyParsed(r.lines); $("pasteModal").hidden = true; show("create");
+});
+function applyParsed(lines) {
+  var first = S.speakers.length ? S.speakers[0].name : "Speaker 1";
+  S.blocks = lines.map(function (l) { return { speaker: l.speaker || first, text: l.text }; });
+  if (!S.blocks.length) S.blocks = [{ speaker: first, text: "" }];
+  ensureSpeakers(); renderBlocks(); renderSpeakers(); saveScript();
+}
+["optPause", "optTau"].forEach(function (id) {
+  $(id).addEventListener("input", function () {
+    $(id + "V").textContent = id === "optPause" ? Number($(id).value).toFixed(2) + " s" : Number($(id).value).toFixed(2);
+  });
+  $(id).addEventListener("change", function () {
+    post("/api/config", id === "optPause" ? { pause: Number($(id).value) } : { tau: Number($(id).value) }).catch(function () {});
+  });
+});
+$("optFree").addEventListener("change", function () { post("/api/config", { free_after: $("optFree").checked }).catch(function () {}); });
+$("optWm").addEventListener("change", function () { post("/api/config", { watermark: $("optWm").checked }).catch(function () {}); });
+$("cfgDevice").addEventListener("change", function () {
+  post("/api/config", { device: $("cfgDevice").value }).then(function () { toast("Saved — restart the engine for it to apply"); }).catch(function (e) { toast(e.message, true); });
+});
+
+/* ========================= speaking ========================= */
+function linesFromScript() {
+  var out = [];
+  S.blocks.forEach(function (b) {
+    if (!b.text.trim()) return;
+    var sp = S.speakers.find(function (s) { return s.name === b.speaker; }) || S.speakers[0];
+    out.push({ text: b.text.trim(), speaker: sp.name, voice: sp.voice || "", speed: sp.speed,
+      base: S.version === "v2" ? { language: sp.language, speaker: sp.speaker } : { language: sp.language, style: sp.style } });
+  });
+  return out;
+}
+async function runScript(lines, title) {
+  if (!lines.length) { toast("Write something first", true); return; }
+  if (S.job && (S.job.state === "queued" || S.job.state === "running")) { toast("A take is already being read", true); return; }
+  try {
+    var r = await post("/api/speak", { version: S.version, lines: lines, title: title || "", opts: {
+      pause: Number($("optPause").value), tau: Number($("optTau").value),
+      free_after: $("optFree").checked, watermark: $("optWm").checked } });
+    S.job = r.job; renderJob(); pollJob();
+  } catch (e) { toast(e.message, true); }
+}
+$("runBtn").addEventListener("click", function () { runScript(linesFromScript(), $("optTitle").value.trim()); });
+$("stopBtn").addEventListener("click", cancelJob);
+$("jobCancel").addEventListener("click", cancelJob);
+async function cancelJob() { if (!S.job) return; try { await post("/api/jobs/" + S.job.id + "/cancel"); } catch (e) { toast(e.message, true); } }
+$("homeRead").addEventListener("click", async function () {
+  var text = $("homeText").value;
+  if (!text.trim()) { toast("Type something first", true); return; }
+  var parsed = (await post("/api/parse", { text: text })).lines;
+  var named = parsed.some(function (l) { return l.speaker; });
+  if (named && parsed.length > 1) { applyParsed(parsed); show("create"); toast("Your script is on the Create page — assign voices, then read it"); return; }
+  var base = baseFromValue(S.version, $("homeBase").value);
+  var lines = parsed.map(function (l) { return { text: l.text, speaker: "", voice: $("homeVoice").value, speed: 1.0, base: base }; });
+  runScript(lines, "");
+});
+document.addEventListener("keydown", function (e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    if (S.view === "create") $("runBtn").click(); else if (S.view === "home") $("homeRead").click();
+  }
+});
+var jobTimer = null;
+function renderJob() {
+  var j = S.job, running = j && (j.state === "queued" || j.state === "running");
+  $("runBtn").disabled = !!running; $("runBtn").classList.toggle("working", !!running);
+  $("runLabel").textContent = running ? (j.msg || "Reading…") : "Read the script";
+  $("stopBtn").hidden = !running; $("jobBox").hidden = !running; $("workNote").hidden = !!running;
+  if (running) { $("jobMsg").textContent = j.msg || "…"; $("jobBar").style.width = (j.pct || 0) + "%"; }
+  document.querySelectorAll(".blk").forEach(function (el) {
+    el.classList.toggle("working", !!running && j.stage !== "embed" && Number(el.dataset.i) === j.done);
+  });
+}
+async function pollJob() {
+  clearTimeout(jobTimer);
+  if (!S.job) return;
+  try { S.job = (await api("/api/jobs/" + S.job.id)).job; } catch (e) { return; }
+  renderJob();
+  if (S.job.state === "queued" || S.job.state === "running") { jobTimer = setTimeout(pollJob, 700); return; }
+  if (S.job.state === "done") {
+    await loadTakes();
+    var t = S.takes.find(function (x) { return x.id === S.job.take; });
+    if (t) { toast("Take ready: " + t.title); playTake(t, 0); }
+  } else { toast(S.job.error || S.job.msg || "The take failed", true); }
+  loadStatus(true);
+}
+
+/* ========================= takes / library / player ========================= */
+async function loadTakes() { try { S.takes = (await api("/api/takes")).takes || []; } catch (e) { S.takes = []; } renderTracks(); renderLibrary(); renderHome(); }
+function takeSub(t) {
+  var who = {}; (t.lines || []).forEach(function (l) { if (l.voice_name) who[l.voice_name] = 1; });
+  var names = Object.keys(who);
+  return (t.version || "").toUpperCase() + " · " + (t.lines || []).length + " line" + ((t.lines || []).length === 1 ? "" : "s") + " · " + fmtTime(t.seconds) + (names.length ? " · " + names.join(", ") : " · base voice");
+}
+function renderTracks() {
+  var host = $("tracks"); host.innerHTML = "";
+  if (!S.takes.length) { host.innerHTML = '<div class="empty"><b>No takes yet</b>Press Read and the first one lands here.</div>'; return; }
+  S.takes.slice(0, 40).forEach(function (t) {
+    var el = document.createElement("div"); el.className = "trow" + (S.play.take && S.play.take.id === t.id ? " active" : "");
+    el.innerHTML = '<div class="art" title="Play"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg><span class="dur">' + fmtTime(t.seconds) + "</span></div>" +
+      '<div class="tmeta"><div class="t">' + esc(t.title) + '</div><div class="s">' + esc(takeSub(t)) + "</div>" +
+      '<div class="tacts"><a class="iconbtn" href="/api/takes/' + t.id + '/audio?download=1" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12M6 10l6 6 6-6M4 20h16"/></svg></a>' +
+      '<button class="iconbtn" data-act="rename" title="Rename"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' +
+      '<button class="iconbtn" data-act="del" title="Delete"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div></div>';
+    host.appendChild(el);
+    el.querySelector(".art").addEventListener("click", function () { playTake(t, 0); });
+    el.querySelector(".tmeta .t").addEventListener("click", function () { playTake(t, 0); });
+    el.querySelector('[data-act="rename"]').addEventListener("click", function () { renameTake(t); });
+    el.querySelector('[data-act="del"]').addEventListener("click", function () { deleteTake(t); });
+  });
+}
+async function renameTake(t) {
+  var title = prompt("Title for this take", t.title); if (title == null || !title.trim()) return;
+  await post("/api/takes/" + t.id, { title: title.trim() }); loadTakes();
+}
+async function deleteTake(t) {
+  if (!confirm("Delete \"" + t.title + "\"?")) return;
+  await api("/api/takes/" + t.id, { method: "DELETE" });
+  if (S.play.take && S.play.take.id === t.id) { $("player").pause(); S.play.take = null; renderPlayer(); }
+  loadTakes();
+}
+function waveHtml(seed) {
+  var bars = ""; var x = seed || 7;
+  for (var i = 0; i < 28; i++) { x = (x * 9301 + 49297) % 233280; bars += '<i style="height:' + (6 + (x / 233280) * 30).toFixed(0) + 'px"></i>'; }
+  return '<div class="wave">' + bars + "</div>";
+}
+function takeCard(t) {
+  var el = document.createElement("div"); el.className = "gcard";
+  el.innerHTML = waveHtml(t.id.charCodeAt(0) * 31 + t.id.charCodeAt(1)) + '<div class="t">' + esc(t.title) + '</div><div class="s">' + esc(takeSub(t)) + '</div><div class="s">' + esc(fmtDate(t.created)) + "</div>" +
+    '<div class="acts"><button class="iconbtn" data-act="play" title="Play"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg></button>' +
+    '<a class="iconbtn" href="/api/takes/' + t.id + '/audio?download=1" title="Download"><svg viewBox="0 0 24 24"><path d="M12 3v12M6 10l6 6 6-6M4 20h16"/></svg></a>' +
+    '<button class="iconbtn" data-act="rename" title="Rename"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' +
+    '<button class="iconbtn" data-act="del" title="Delete"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>';
+  el.querySelector(".wave").addEventListener("click", function () { playTake(t, 0); });
+  el.querySelector('[data-act="play"]').addEventListener("click", function () { playTake(t, 0); });
+  el.querySelector('[data-act="rename"]').addEventListener("click", function () { renameTake(t); });
+  el.querySelector('[data-act="del"]').addEventListener("click", function () { deleteTake(t); });
+  return el;
+}
+function renderLibrary() {
+  var host = $("libCards"); host.innerHTML = "";
+  var f = S.libFilter.toLowerCase();
+  var items = S.takes.filter(function (t) { return !f || (t.title + " " + takeSub(t)).toLowerCase().indexOf(f) >= 0; });
+  $("libEmpty").hidden = !!items.length;
+  items.forEach(function (t) { host.appendChild(takeCard(t)); });
+}
+$("libFilter").addEventListener("input", function () { S.libFilter = $("libFilter").value; renderLibrary(); });
+function renderHome() {
+  var host = $("homeTakes"); host.innerHTML = "";
+  S.takes.slice(0, 8).forEach(function (t) { host.appendChild(takeCard(t)); });
+  if (!S.takes.length) host.innerHTML = '<div class="empty" style="grid-column:1/-1"><b>No takes yet</b>Read something above and it will appear here.</div>';
+}
+var P = $("player");
+function playTake(t, line) {
+  S.play.take = t; S.play.line = -1;
+  P.src = "/api/takes/" + t.id + "/audio"; P.play().catch(function () {});
+  renderPlayer(); renderTracks();
+}
+function playLine(t, i) {
+  if (!t || !t.lines || i < 0 || i >= t.lines.length) return;
+  S.play.take = t; S.play.line = i;
+  P.src = "/api/takes/" + t.id + "/line/" + i; P.play().catch(function () {});
+  renderPlayer();
+}
+function renderPlayer() {
+  var t = S.play.take;
+  $("pTitle").textContent = t ? t.title + (S.play.line >= 0 ? " · line " + (S.play.line + 1) : "") : "Nothing playing";
+  $("pSub").textContent = t ? (S.play.line >= 0 && t.lines[S.play.line] ? t.lines[S.play.line].text : takeSub(t)) : "—";
+  $("pPlayIcon").innerHTML = P.paused ? '<path d="M7 4l13 8-13 8z"/>' : '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
+}
+$("pPlay").addEventListener("click", function () {
+  if (!S.play.take) { if (S.takes.length) playTake(S.takes[0], 0); return; }
+  if (P.paused) P.play(); else P.pause();
+});
+$("pPrev").addEventListener("click", function () { var t = S.play.take; if (!t) return; playLine(t, S.play.line <= 0 ? 0 : S.play.line - 1); });
+$("pNext").addEventListener("click", function () { var t = S.play.take; if (!t) return; if (S.play.line + 1 < t.lines.length) playLine(t, S.play.line + 1); });
+$("pDown").addEventListener("click", function () { if (S.play.take) window.location.href = "/api/takes/" + S.play.take.id + "/audio?download=1"; });
+P.addEventListener("play", renderPlayer); P.addEventListener("pause", renderPlayer);
+P.addEventListener("timeupdate", function () {
+  $("pCur").textContent = fmtTime(P.currentTime); $("pDur").textContent = fmtTime(P.duration);
+  if (P.duration) $("pSeek").value = Math.round(P.currentTime / P.duration * 1000);
+});
+P.addEventListener("ended", function () {
+  var t = S.play.take; if (t && S.play.line >= 0 && S.play.line + 1 < t.lines.length) playLine(t, S.play.line + 1); else renderPlayer();
+});
+$("pSeek").addEventListener("input", function () { if (P.duration) P.currentTime = $("pSeek").value / 1000 * P.duration; });
+
+/* ========================= voices page ========================= */
+function renderVoices() {
+  var host = $("voiceCards"); host.innerHTML = "";
+  $("voicesEmpty").hidden = !!S.voices.length;
+  S.voices.forEach(function (v) {
+    var el = document.createElement("div"); el.className = "gcard";
+    el.innerHTML = waveHtml(v.id.charCodeAt(0) * 17 + v.id.charCodeAt(2)) + '<div class="t">' + esc(v.name) + '</div><div class="s">' + esc(v.original || v.file) + " · " + fmtSize(v.bytes) +
+      (v.speech_seconds ? " · " + v.speech_seconds + "s speech" : "") + "</div>" +
+      '<div class="acts"><button class="iconbtn" data-act="play" title="Play the clip"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9z"/></svg></button>' +
+      '<button class="iconbtn" data-act="rename" title="Rename"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' +
+      '<button class="iconbtn" data-act="del" title="Delete"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div>';
+    host.appendChild(el);
+    function playClip() { S.play.take = null; S.play.line = -1; P.src = "/api/voices/" + v.id + "/audio"; P.play().catch(function () {}); $("pTitle").textContent = v.name; $("pSub").textContent = "reference clip"; }
+    el.querySelector(".wave").addEventListener("click", playClip);
+    el.querySelector('[data-act="play"]').addEventListener("click", playClip);
+    el.querySelector('[data-act="rename"]').addEventListener("click", async function () {
+      var n = prompt("Name for this voice", v.name); if (n == null || !n.trim()) return;
+      await post("/api/voices/" + v.id, { name: n.trim() }); loadVoices();
+    });
+    el.querySelector('[data-act="del"]').addEventListener("click", async function () {
+      if (!confirm("Delete the voice \"" + v.name + "\"?")) return;
+      await api("/api/voices/" + v.id, { method: "DELETE" }); loadVoices();
+    });
+  });
+}
+$("voiceAdd").addEventListener("click", async function () {
+  var f = $("voiceFile").files[0];
+  if (!f) { toast("Pick an audio file first", true); return; }
+  var fd = new FormData(); fd.append("file", f); fd.append("name", $("voiceName").value.trim());
+  $("voiceAdd").disabled = true;
+  try { await api("/api/voices", { method: "POST", body: fd }); $("voiceFile").value = ""; $("voiceName").value = ""; toast("Voice added"); loadVoices(); }
+  catch (e) { toast(e.message, true); } finally { $("voiceAdd").disabled = false; }
+});
+
+/* ========================= models page ========================= */
+async function loadModels() {
+  var r; try { r = await api("/api/models"); } catch (e) { return; }
+  $("hfEndpoint").value = r.hf_endpoint || ""; $("hfToken").placeholder = r.has_token ? "saved — type to replace" : "hf_…";
+  $("zipV2").value = (r.zip_urls || {}).v2 || ""; $("zipV1").value = (r.zip_urls || {}).v1 || "";
+  var host = $("modelCards"); host.innerHTML = "";
+  r.models.forEach(function (m) {
+    var el = document.createElement("div"); el.className = "mcard";
+    el.innerHTML = '<div class="ic">' + esc(m.key.toUpperCase()) + '</div><div class="grow"><div class="nm">' + esc(m.label) + " " +
+      (m.present ? '<span class="pill ok">on disk · ' + m.files + " files · " + fmtSize(m.bytes) + "</span>" : m.downloading ? '<span class="pill warn">downloading</span>' : '<span class="pill">not downloaded · ' + esc(m.size) + "</span>") +
+      '</div><div class="ab">' + esc(m.about) + ' <b>Card memory:</b> ' + esc(m.vram) + '. <span class="mono">' + esc(m.repo) + "</span></div>" +
+      '<div class="acts">' + (m.present ? '<button class="btn thin" data-act="dl">Check for missing files</button><button class="btn thin danger" data-act="del">Delete from disk</button>'
+        : '<button class="btn go thin" data-act="dl">Download</button>') +
+      '<button class="btn thin" data-act="imp">Import a zip or folder I already have</button></div></div>';
+    host.appendChild(el);
+    el.querySelector('[data-act="dl"]').addEventListener("click", async function () {
+      try { var t = await post("/api/models/" + m.key + "/download"); watchTask(t.task.id); } catch (e) { toast(e.message, true); }
+    });
+    el.querySelector('[data-act="imp"]').addEventListener("click", async function () {
+      var p = prompt("Path to the checkpoint zip or folder on this computer\n(e.g. C:\\Downloads\\checkpoints_v2_0417.zip)"); if (!p) return;
+      try { var t = await post("/api/models/" + m.key + "/import", { path: p }); watchTask(t.task.id); } catch (e) { toast(e.message, true); }
+    });
+    var del = el.querySelector('[data-act="del"]');
+    if (del) del.addEventListener("click", async function () {
+      if (!confirm("Delete " + m.label + " from disk? It can be downloaded again.")) return;
+      await api("/api/models/" + m.key, { method: "DELETE" }); loadModels(); loadStatus(true); loadBases();
+    });
+  });
+}
+$("hfSave").addEventListener("click", async function () {
+  var body = { hf_endpoint: $("hfEndpoint").value, zip_urls: { v2: $("zipV2").value, v1: $("zipV1").value } };
+  if ($("hfToken").value) body.hf_token = $("hfToken").value;
+  try { await post("/api/hf/settings", body); $("hfToken").value = ""; $("hfSaved").textContent = "Saved."; loadModels(); } catch (e) { toast(e.message, true); }
+});
+
+/* ========================= tasks (installs, downloads) ========================= */
+var taskTimer = null;
+function watchTask(id) {
+  S.task = { id: id }; S.taskCursor = 0; $("taskLog").textContent = ""; $("taskCard").open = true;
+  if (S.view !== "models" && S.view !== "engine") show("models");
+  pollTask();
+}
+async function pollTask() {
+  clearTimeout(taskTimer);
+  if (!S.task) return;
+  var r; try { r = await api("/api/tasks/" + S.task.id + "?since=" + S.taskCursor); } catch (e) { return; }
+  var t = r.task; S.taskCursor = t.cursor;
+  if (t.lines.length) { var log = $("taskLog"); log.textContent += t.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+  $("taskPill").hidden = false; $("taskPill").textContent = t.title + " · " + t.state; $("taskPill").className = "pill " + (t.state === "done" ? "ok" : t.state === "error" ? "err" : t.state === "running" ? "warn" : "");
+  $("taskCancel").hidden = t.state !== "running"; $("taskDetail").textContent = t.detail || "";
+  $("taskProg").hidden = t.pct == null; if (t.pct != null) $("taskProg").firstElementChild.style.width = t.pct + "%";
+  if (t.state === "running") { taskTimer = setTimeout(pollTask, 800); return; }
+  if (t.state === "done") toast(t.title + " finished"); else if (t.state === "error") toast(t.title + " failed: " + t.detail, true);
+  S.task = null; loadStatus(false); loadDeps(false); loadModels(); loadBases();
+  if (S._installQueue && S._installQueue.length) installNext();
+}
+$("taskCancel").addEventListener("click", async function () { if (S.task) await post("/api/tasks/" + S.task.id + "/cancel"); });
+async function resumeTasks() {
+  try { var r = await api("/api/tasks"); var running = r.tasks.find(function (t) { return t.state === "running"; }); if (running) watchTask(running.id); } catch (e) { /* */ }
+}
+
+/* ========================= engine page ========================= */
+function renderEngineStats() {
+  var st = S.status; if (!st) return;
+  var g = st.gpu || {}, tf = st.torch || {}, live = (st.engine || {}).live || {};
+  var cards = [
+    { l: "Card", v: g.present ? g.name : "none found", s: g.present ? "driver " + g.driver : "nvidia-smi is not on PATH" },
+    { l: "Card memory", v: g.present ? fmtSize(g.vram_total) : "—", s: g.present ? fmtSize(g.vram_used) + " in use" : "" },
+    { l: "PyTorch", v: tf.installed ? (tf.version || "?") : "not installed", s: tf.error ? tf.error : tf.cuda ? "CUDA " + tf.cuda_version + " on " + tf.gpu : tf.installed ? "CPU only" : "" },
+    { l: "Engine", v: (st.engine || {}).state || "stopped", s: live.converter ? "converter " + live.converter + (live.vram_used ? " · " + fmtSize(live.vram_used) + " on the card" : "") : "" },
+    { l: "Python", v: st.python.version, s: st.python.melo_ok ? "MeloTTS installs here" : "3.10 or 3.11 needed for MeloTTS" }
+  ];
+  $("gpuStats").innerHTML = cards.map(function (c) { return '<div class="stat"><div class="l">' + esc(c.l) + '</div><div class="v" title="' + esc(c.v) + '">' + esc(c.v) + '</div><div class="s">' + esc(c.s) + "</div></div>"; }).join("");
+  var fit = $("fitNote");
+  if (!g.present) fit.innerHTML = "No NVIDIA card was found, so everything runs on the CPU. It works, but a line takes a good while.";
+  else if (g.vram_total && g.vram_total < 3 * 1024 * 1024 * 1024) fit.innerHTML = '<span class="warn-text">This card has under 3 GB.</span> OpenVoice itself fits, but keep <b>Free GPU memory after each take</b> on and close other GPU programs.';
+  else fit.innerHTML = "OpenVoice is small: the converter and one base voice take <b>under 1 GB</b> of card memory, so an 8 GB card such as an RTX 4060 runs V1 and V2 with room to spare. The whole stack never needs more than about 2 GB.";
+  $("engState").textContent = (st.engine || {}).state || "stopped";
+  $("engState").className = "pill " + ((st.engine || {}).state === "ready" ? "ok" : (st.engine || {}).state === "error" ? "err" : "");
+  var h = (st.engine || {}).hello || {};
+  $("engHello").textContent = h.torch ? "PyTorch " + h.torch + (h.cuda ? " on " + h.gpu : " (CPU)") + (h.melo ? " · MeloTTS present" : " · no MeloTTS") : "";
+}
+async function loadDeps(fast) {
+  var r; try { r = await api("/api/deps" + (fast ? "?fast=1" : "")); } catch (e) { return; }
+  S.deps = r.deps; S.builds = r.builds;
+  var host = $("deps"); host.innerHTML = "";
+  r.deps.forEach(function (d) {
+    var el = document.createElement("div"); el.className = "dep";
+    var act = "";
+    if (d.installable && d.id !== "python") {
+      if (d.id === "torch") act += '<select data-f="build" style="width:auto;padding:5px 8px;font-size:12px">' + r.builds.map(function (b) { return '<option value="' + b[0] + '"' + (b[0] === d.build ? " selected" : "") + ">" + esc(b[1]) + (b[0] === "auto" ? " — " + d.recommended : "") + "</option>"; }).join("") + "</select>";
+      var busy = r.installing.indexOf(d.id) >= 0 || (d.model && S.task);
+      act += '<button class="btn thin' + (d.state === "ok" ? "" : " go") + '" data-act="install"' + (busy ? " disabled" : "") + ">" + (busy ? '<span class="spin"></span>' : "") + (d.state === "ok" ? (d.model ? "Check" : "Reinstall") : (d.model ? "Download" : "Install")) + "</button>";
+    }
+    el.innerHTML = '<span class="st ' + esc(d.state) + '"></span><div class="grow"><div class="nm">' + esc(d.label) + (d.optional ? ' <span class="pill">optional</span>' : "") + '</div><div class="dt">' + esc(d.detail) + '</div></div><div class="act">' + act + "</div>";
+    host.appendChild(el);
+    var btn = el.querySelector('[data-act="install"]');
+    if (btn) btn.addEventListener("click", function () { installDep(d.id, el); });
+  });
+}
+async function installDep(id, el) {
+  var body = {};
+  if (id === "torch" && el) body.build = el.querySelector('[data-f="build"]').value;
+  try { var t = await post("/api/deps/" + id + "/install", body); watchTask(t.task.id); if (S.view !== "models") show("models"); }
+  catch (e) { toast(e.message, true); }
+}
+$("installAll").addEventListener("click", function () {
+  S._installQueue = S.deps.filter(function (d) { return d.installable && d.state !== "ok" && !d.optional && d.id !== "python"; }).map(function (d) { return d.id; });
+  // V2 is the default version, so its base voices count as part of "everything".
+  if (S.deps.some(function (d) { return d.id === "melo" && d.state !== "ok"; })) S._installQueue.push("melo");
+  if (!S._installQueue.length) { toast("Nothing is missing"); return; }
+  installNext();
+});
+function installNext() {
+  var id = S._installQueue.shift(); if (!id) return;
+  var el = null;
+  installDep(id, el);
+}
+$("depsRefresh").addEventListener("click", function () { loadDeps(false); loadStatus(false); });
+async function engineAction(what) {
+  try { await post("/api/engine/" + what); toast("Engine: " + what); } catch (e) { toast(e.message, true); }
+  loadStatus(true); pollEngine();
+}
+$("engStart").addEventListener("click", function () { engineAction("start"); });
+$("engStop").addEventListener("click", function () { engineAction("stop"); });
+$("engRestart").addEventListener("click", function () { engineAction("restart"); });
+$("engFree").addEventListener("click", function () { engineAction("free"); });
+var engTimer = null;
+async function pollEngine() {
+  clearTimeout(engTimer);
+  if (S.view !== "engine") return;
+  var r; try { r = await api("/api/engine/log?since=" + S.engCursor); } catch (e) { engTimer = setTimeout(pollEngine, 3000); return; }
+  if (r.cursor < S.engCursor) { S.engCursor = 0; S.engLines = []; }
+  if (r.lines.length) { S.engLines = S.engLines.concat(r.lines).slice(-600); S.engCursor = r.cursor;
+    var c = $("engConsole"); c.textContent = S.engLines.join("\n"); c.scrollTop = c.scrollHeight; }
+  engTimer = setTimeout(pollEngine, 1500);
+}
+async function selfTest(version) {
+  $("selfSteps").innerHTML = '<div><span class="k warn-text">…</span><span>Running the ' + version.toUpperCase() + " self-test</span></div>"; $("selfPlay").hidden = true;
+  var t; try { t = (await post("/api/selftest", { version: version })).task; } catch (e) { toast(e.message, true); return; }
+  (function poll() {
+    api("/api/tasks/" + t.id).then(function (r) {
+      var task = r.task, steps = (task.meta || {}).steps || [];
+      $("selfSteps").innerHTML = steps.map(function (s) { return '<div><span class="k ' + (s.ok ? "ok-text" : "bad-text") + '">' + (s.ok ? "ok" : "FAIL") + "</span><span>" + esc(s.name) + (s.detail ? '  <span style="color:var(--dim)">' + esc(s.detail) + "</span>" : "") + "</span></div>"; }).join("") +
+        (task.state === "running" ? '<div><span class="k warn-text">…</span><span>working</span></div>' : task.state === "error" ? '<div><span class="k bad-text">FAIL</span><span>' + esc(task.detail) + "</span></div>" : "");
+      if (task.state === "running") setTimeout(poll, 1000);
+      else { $("selfPlay").hidden = !(task.meta && task.meta.file && task.state === "done"); loadStatus(true); }
+    }).catch(function () { setTimeout(poll, 1500); });
+  })();
+}
+$("selfV2").addEventListener("click", function () { selfTest("v2"); });
+$("selfV1").addEventListener("click", function () { selfTest("v1"); });
+$("selfPlay").addEventListener("click", function () { S.play.take = null; P.src = "/api/selftest/audio?t=" + Date.now(); P.play(); $("pTitle").textContent = "Self-test line"; $("pSub").textContent = "This audio is generated by OpenVoice."; });
+
+/* ========================= boot ========================= */
+(async function boot() {
+  loadScript();
+  await loadStatus(false);
+  await Promise.all([loadBases(), loadVoices(), loadTakes()]);
+  renderVersion(); renderBlocks(); renderSpeakers();
+  var v = store("ov.view"); show(v && document.querySelector('[data-page="' + v + '"]') ? v : "home");
+  resumeTasks();
+  try { var jobs = (await api("/api/jobs")).jobs; var live = jobs.find(function (j) { return j.state === "queued" || j.state === "running"; }); if (live) { S.job = live; renderJob(); pollJob(); } } catch (e) { /* */ }
+  setInterval(function () { loadStatus(true); }, 6000);
+})();
+</script>
+</body>
+</html>
