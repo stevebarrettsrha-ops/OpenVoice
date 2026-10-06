@@ -23,6 +23,14 @@ The upstream code (`openvoice/`, the demo notebooks, `docs/`) is here
 unchanged apart from one keyword-argument fix in `openvoice/api.py`; the
 studio is the files around it.
 
+![Home](docs/screenshots/home.png)
+
+| Create | Engine |
+|---|---|
+| ![Create](docs/screenshots/create.png) | ![Engine](docs/screenshots/engine.png) |
+| **Voices** | **Models** |
+| ![Voices](docs/screenshots/voices.png) | ![Models](docs/screenshots/models.png) |
+
 ---
 
 ## Running it

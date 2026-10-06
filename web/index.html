@@ -180,7 +180,7 @@
              padding:16px 16px 12px;box-shadow:0 30px 70px -50px var(--accent)}
   .promptbox textarea{background:transparent;border:0;padding:0;min-height:72px;font-size:15px}
   .promptbox .row{margin-top:8px}
-  .promptbox select{width:auto;max-width:200px;padding:6px 9px;font-size:12.5px;background:#232329}
+  .promptbox select{width:auto;max-width:280px;padding:6px 9px;font-size:12.5px;background:#232329}
   .banner{max-width:760px;margin:30px auto 0;border-radius:16px;padding:24px 28px;
           background:linear-gradient(115deg,#12324a,#2c1257 55%,#6b1f7c)}
   .banner h3{margin:0 0 6px;font-size:17px}
@@ -557,6 +557,8 @@ function show(view) {
     if (n.getAttribute("data-view") === view) n.setAttribute("aria-current", "page"); else n.removeAttribute("aria-current"); });
   document.body.classList.toggle("solo", view !== "create" && view !== "home");
   $("main").scrollTop = 0;
+  // Textareas sized while the page was hidden measured as 0; size them now.
+  if (view === "create") document.querySelectorAll("#blocks textarea").forEach(autosize);
   if (view === "engine") { loadDeps(false); pollEngine(); }
   if (view === "models") { loadModels(); }
   if (view === "voices") { loadVoices(); }
@@ -584,10 +586,12 @@ async function loadStatus(fast) {
   $("engineTag").hidden = !!(st.torch && st.torch.installed && !st.torch.error);
   $("setupBanner").hidden = !!st.ready;
   if (!st.ready) {
-    var missing = [];
-    if (!(st.torch && st.torch.installed)) missing.push("PyTorch");
-    if (!anyModel) missing.push("the OpenVoice checkpoints");
-    $("setupText").textContent = (missing.length ? missing.join(" and ") + (missing.length > 1 ? " are" : " is") + " not here yet. " : "") +
+    var lead = "";
+    var noTorch = !(st.torch && st.torch.installed);
+    if (noTorch && !anyModel) lead = "PyTorch and the OpenVoice checkpoints are not here yet. ";
+    else if (noTorch) lead = "PyTorch is not here yet. ";
+    else if (!anyModel) lead = "The OpenVoice checkpoints are not here yet. ";
+    $("setupText").textContent = lead +
       "The Engine page installs what is missing into this app's own environment, one button each; the Models page fetches the checkpoints.";
   }
   if (st.config && !S._cfgApplied) {
@@ -663,7 +667,7 @@ function renderVersion() {
   document.querySelectorAll("#versionSeg button").forEach(function (b) { b.classList.toggle("on", b.getAttribute("data-v") === S.version); });
   renderSpeakers(); renderHomeSelects();
 }
-function autosize(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
+function autosize(t) { t.style.height = "auto"; t.style.height = Math.max(t.scrollHeight + 2, 36) + "px"; }
 function renderBlocks() {
   ensureSpeakers();
   var host = $("blocks"); host.innerHTML = "";
