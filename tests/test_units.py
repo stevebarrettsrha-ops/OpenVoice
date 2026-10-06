@@ -302,6 +302,7 @@ class Api(unittest.TestCase):
         self.assertEqual(len(take["lines"]), 2)
         self.assertEqual(take["lines"][0]["voice_name"], "Me")
         self.assertEqual(take["lines"][1]["voice_name"], "")
+        self.assertEqual(take["pause"], 0.25)       # the player needs it to find the current line
         audio = self.client.get(f"/api/takes/{take['id']}/audio")
         self.assertEqual(audio.status_code, 200)
         frames, rate = wav_frames(audio.data)
