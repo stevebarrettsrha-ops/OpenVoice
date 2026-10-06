@@ -1,0 +1,49 @@
+name: Tests
+
+# No deploy job: OpenVoice Studio is a local server that runs the models on
+# your own machine, so there is nothing to publish. This only checks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Validation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: python tests/check.py
+
+  units:
+    name: Unit tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the floor the launchers enforce; 3.13 is what a new install
+        # of Python gives you today.
+        python: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements.txt
+      # tests/mock_engine.py answers for engine.py, so this needs no PyTorch,
+      # no checkpoints and no card.
+      - run: python -m unittest discover -s tests -p 'test_*.py' -v

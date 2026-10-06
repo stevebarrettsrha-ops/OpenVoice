@@ -1,0 +1,5 @@
+# The app itself. PyTorch, the OpenVoice packages (requirements-engine.txt)
+# and MeloTTS are installed from the Engine page into the same .venv, so the
+# first launch is seconds rather than gigabytes.
+flask>=3.0
+requests>=2.31

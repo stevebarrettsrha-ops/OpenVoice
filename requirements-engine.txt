@@ -1,0 +1,21 @@
+# What engine.py needs on top of PyTorch. The Engine page installs this list
+# (it is mirrored in manager.ENGINE_PKGS); it is here for anyone setting up
+# by hand:  pip install -r requirements-engine.txt
+#
+# PyTorch is deliberately absent: pick the build for your card, e.g.
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+# MeloTTS (OpenVoice V2's base voices) is a separate step:
+#   pip install git+https://github.com/myshell-ai/MeloTTS.git
+librosa>=0.9.1
+soundfile
+numpy<2
+scipy
+eng_to_ipa
+inflect
+unidecode
+pypinyin
+cn2an
+jieba
+pydub
+silero-vad
+requests
