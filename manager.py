@@ -422,19 +422,30 @@ def deps(cfg: dict, fast: bool = False) -> list[dict]:
                 "installable": True})
 
     melo = pkg_version("melotts") or pkg_version("melo")
-    melo_ok = bool(melo) or (not fast and importable("melo"))
+    uni = unidic_ready()
+    if melo and uni:
+        m_state, m_detail = "ok", f"version {melo}"
+    elif melo:
+        m_state = "warn"
+        m_detail = (f"version {melo} is installed, but it cannot import until the "
+                    "unidic dictionary below is downloaded.")
+    else:
+        m_state = "missing"
+        m_detail = ("Not installed. V2 reads every line with a MeloTTS voice; "
+                    "V1 has its own base speakers and does not need this.")
     out.append({"id": "melo", "label": "MeloTTS (base voices for V2)",
-                "state": "ok" if melo_ok else "missing",
-                "detail": f"version {melo}" if melo else (
-                    "Installed" if melo_ok else
-                    "Not installed. V2 reads every line with a MeloTTS voice; "
-                    "V1 has its own base speakers and does not need this."),
+                "state": m_state, "detail": m_detail,
                 "installable": True, "optional": True})
 
-    out.append({"id": "unidic", "label": "Japanese dictionary (unidic)",
-                "state": "ok" if unidic_ready() else "missing",
-                "detail": "Only needed for Japanese lines in V2. About 500 MB.",
-                "installable": True, "optional": True})
+    # Not a Japanese-only extra: MeloTTS's text front end loads the MeCab
+    # tagger at import time, so without this dictionary `import melo` fails
+    # for every language. install_melo fetches it; this row is for when
+    # that part did not finish.
+    out.append({"id": "unidic", "label": "unidic dictionary (MeloTTS needs it)",
+                "state": "ok" if uni else ("missing" if melo else "missing"),
+                "detail": "MeloTTS imports this at start-up, whatever the language. "
+                          "About 500 MB." if not uni else "Downloaded",
+                "installable": True, "optional": not melo})
 
     wm = pkg_version("wavmark")
     out.append({"id": "wavmark", "label": "wavmark (audio watermark)",
@@ -517,6 +528,19 @@ def install_melo(task: Task) -> None:
     run_logged(task, [sys.executable, "-c", code])
     # MeloTTS's librosa pin drags numpy; make sure it stayed below 2.
     pip(task, ["numpy<2"])
+    # Not optional: melo imports the MeCab tagger at start-up, and without
+    # the dictionary `import melo` fails for every language, not only Japanese.
+    if not unidic_ready():
+        install_unidic(task)
+    # First import: melo's text front ends fetch a few tokenizers from
+    # HuggingFace (a Japanese BERT among them) the first time they load. Doing
+    # it here, with the output in this log, beats a first take that sits on
+    # "base voice" for minutes with nothing to show.
+    task.set(detail="Importing MeloTTS once so it fetches what it needs")
+    rc = run_logged(task, [sys.executable, "-c", "import melo.api; print('MeloTTS imports')"])
+    if rc != 0:
+        raise RuntimeError("MeloTTS installed but does not import; the log above says why "
+                           "(a blocked download from huggingface.co is the usual cause)")
 
 
 def install_unidic(task: Task) -> None:

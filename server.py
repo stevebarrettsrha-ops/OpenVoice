@@ -513,7 +513,7 @@ def run_job(job: dict) -> None:
             "created": time.time(), "version": version,
             "seconds": result.get("seconds", wav_seconds(out_dir / "take.wav")),
             "sample_rate": result.get("sample_rate"), "elapsed": result.get("elapsed"),
-            "vram_peak": result.get("vram_peak"),
+            "vram_peak": result.get("vram_peak"), "pause": payload["opts"]["pause"],
             "lines": [{"text": ln["text"], "speaker": ln["speaker"], "voice": ln["voice"],
                        "voice_name": voices.get(ln["voice"], {}).get("name", ""),
                        "base": ln["base"], "file": Path(f).name,

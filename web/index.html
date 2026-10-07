@@ -648,13 +648,14 @@ function defaultSpeaker(name) {
   return { name: name, voice: S.voices.length ? S.voices[0].id : "", language: "EN", speaker: "EN-Default", style: "default", speed: 1.0 };
 }
 function ensureSpeakers() {
-  if (!S.speakers.length) S.speakers.push(defaultSpeaker("Speaker 1"));
+  // Named speakers from the blocks first; the default only when nothing names one.
   S.blocks.forEach(function (b) {
-    if (!S.speakers.some(function (s) { return s.name === b.speaker; })) {
-      if (!b.speaker) b.speaker = S.speakers[0].name;
-      else S.speakers.push(defaultSpeaker(b.speaker));
+    if (b.speaker && !S.speakers.some(function (s) { return s.name === b.speaker; })) {
+      S.speakers.push(defaultSpeaker(b.speaker));
     }
   });
+  if (!S.speakers.length) S.speakers.push(defaultSpeaker("Speaker 1"));
+  S.blocks.forEach(function (b) { if (!b.speaker) b.speaker = S.speakers[0].name; });
 }
 function saveScript() { store("ov.script", { blocks: S.blocks, speakers: S.speakers, version: S.version }); }
 function loadScript() {
@@ -781,6 +782,14 @@ function applyParsed(lines) {
   var first = S.speakers.length ? S.speakers[0].name : "Speaker 1";
   S.blocks = lines.map(function (l) { return { speaker: l.speaker || first, text: l.text }; });
   if (!S.blocks.length) S.blocks = [{ speaker: first, text: "" }];
+  // A script with named speakers replaces the speaker list: keep the settings
+  // of names that already exist, drop the ones no line uses (the default
+  // "Speaker 1" otherwise lingers as a third, silent speaker).
+  if (lines.some(function (l) { return l.speaker; })) {
+    var used = {};
+    S.blocks.forEach(function (b) { used[b.speaker] = 1; });
+    S.speakers = S.speakers.filter(function (s) { return used[s.name]; });
+  }
   ensureSpeakers(); renderBlocks(); renderSpeakers(); saveScript();
 }
 ["optPause", "optTau"].forEach(function (id) {
@@ -949,8 +958,21 @@ $("pPlay").addEventListener("click", function () {
   if (!S.play.take) { if (S.takes.length) playTake(S.takes[0], 0); return; }
   if (P.paused) P.play(); else P.pause();
 });
-$("pPrev").addEventListener("click", function () { var t = S.play.take; if (!t) return; playLine(t, S.play.line <= 0 ? 0 : S.play.line - 1); });
-$("pNext").addEventListener("click", function () { var t = S.play.take; if (!t) return; if (S.play.line + 1 < t.lines.length) playLine(t, S.play.line + 1); });
+function currentLine() {
+  // Which line is playing: the one chosen, or, while the joined take plays,
+  // the one the playhead is inside (lines plus the pause between them).
+  var t = S.play.take;
+  if (!t) return -1;
+  if (S.play.line >= 0) return S.play.line;
+  var at = P.currentTime || 0, pos = 0, pause = Number(t.pause) || 0;
+  for (var i = 0; i < t.lines.length; i++) {
+    pos += (t.lines[i].seconds || 0) + (i ? pause : 0);
+    if (at < pos) return i;
+  }
+  return t.lines.length - 1;
+}
+$("pPrev").addEventListener("click", function () { var t = S.play.take; if (!t) return; var c = currentLine(); playLine(t, c <= 0 ? 0 : c - 1); });
+$("pNext").addEventListener("click", function () { var t = S.play.take; if (!t) return; var c = currentLine(); if (c + 1 < t.lines.length) playLine(t, c + 1); });
 $("pDown").addEventListener("click", function () { if (S.play.take) window.location.href = "/api/takes/" + S.play.take.id + "/audio?download=1"; });
 P.addEventListener("play", renderPlayer); P.addEventListener("pause", renderPlayer);
 P.addEventListener("timeupdate", function () {

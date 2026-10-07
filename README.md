@@ -51,7 +51,7 @@ missing**:
 |---|---|
 | PyTorch | `pip install torch torchaudio --index-url https://download.pytorch.org/whl/<build>` into `.venv`. The build is picked from your NVIDIA driver (cu128 for driver 570+, cu126, cu121) or CPU when there is no card. |
 | OpenVoice packages | librosa, soundfile, the text front ends, silero-vad — `requirements-engine.txt` |
-| MeloTTS | `pip install git+https://github.com/myshell-ai/MeloTTS.git` plus the NLTK data its English front end wants. Needed for V2 only. |
+| MeloTTS | `pip install git+https://github.com/myshell-ai/MeloTTS.git`, the NLTK data its English front end wants, and the unidic dictionary (about 500 MB) — MeloTTS imports MeCab at start-up, so without it `import melo` fails for every language, not only Japanese. Needed for V2 only. |
 | Checkpoints | Fetched from HuggingFace on the Models page (see below) |
 
 Every install streams its output into the Activity panel, and the engine is
@@ -105,8 +105,10 @@ URL, if you have one, is tried first. **Import a zip or folder I already
 have** takes the original `checkpoints_1226.zip` / `checkpoints_v2_0417.zip`
 or an unpacked copy from disk, with or without the wrapping folder.
 
-MeloTTS downloads its own base-voice weights from HuggingFace the first time
-each language is used — about 200 MB per language, kept in HuggingFace's cache.
+MeloTTS downloads from HuggingFace on its own: a few tokenizers (a Japanese
+BERT among them) the first time it is imported, which the installer does for
+you as its last step, and the base-voice weights for each language the first
+time that language is used — about 200 MB each, kept in HuggingFace's cache.
 
 ### Does it actually work?
 
@@ -165,8 +167,7 @@ base voice as it is) and a **base**:
   cheerful, terrified, angry, sad, friendly — or Chinese.
 
 Each line is read by the base voice first and then converted to the clip's
-tone colour. Japanese on V2 needs the unidic dictionary, a separate button on
-the Engine page (about 500 MB).
+tone colour.
 
 ### More options
 
@@ -204,8 +205,8 @@ holding most of it. Close it, or turn on Free GPU memory after each take.
 **Out of memory on the CPU / very slow** — V2's MeloTTS is the heavy part on a
 CPU. V1 is lighter.
 
-**A take fails on a Japanese line** — install the Japanese dictionary from
-the Engine page.
+**MeloTTS is installed but V2 says it is not** — the unidic dictionary did
+not finish downloading. Press Install on its row in the Engine page.
 
 **The first line after a start takes a while** — it is loading the models.
 The next lines reuse them.
