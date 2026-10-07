@@ -157,6 +157,40 @@ class ManagerBits(unittest.TestCase):
         self.assertIn("converter/checkpoint.pth", st["missing"] or ["converter/checkpoint.pth"])
         self.assertIn("label", st)
 
+    def test_pip_progress_lines_drive_the_bar_not_the_log(self):
+        fake = ("import sys\n"
+                "print('Collecting torch')\n"
+                "print('  Downloading torch-9.whl.metadata (1 kB)')\n"
+                "print('Downloading torch-9.whl (554.6 MB)')\n"
+                "for n in (0, 200000000, 554600000): print(f'Progress {n} of 554600000')\n"
+                "print('Installing collected packages: torch')\n")
+        task = manager.Task("install", "t")
+        rc = manager.run_logged(task, [sys.executable, "-c", fake], pip_progress=True)
+        self.assertEqual(rc, 0)
+        joined = "\n".join(task.lines)
+        self.assertNotIn("Progress 200000000", joined)       # the bar took it
+        self.assertIn("torch-9.whl: 555 MB done", joined)
+        self.assertIsNone(task.pct)                           # cleared at "Installing"
+        self.assertEqual(task.detail, "Installing the downloaded packages")
+        # and without the flag, the lines go to the log untouched
+        task2 = manager.Task("install", "t")
+        manager.run_logged(task2, [sys.executable, "-c", fake])
+        self.assertIn("Progress 200000000 of 554600000", "\n".join(task2.lines))
+
+    def test_tools_dir_goes_first_on_path(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        old_tools, old_path = manager.TOOLS_DIR, os.environ.get("PATH", "")
+        manager.TOOLS_DIR = tmp
+        try:
+            manager.ensure_tools_path()
+            self.assertTrue(os.environ["PATH"].startswith(str(tmp) + os.pathsep))
+            manager.ensure_tools_path()                       # idempotent
+            self.assertEqual(os.environ["PATH"].count(str(tmp)), 1)
+        finally:
+            manager.TOOLS_DIR = old_tools
+            os.environ["PATH"] = old_path
+
     def test_task_log_and_view(self):
         t = manager.Task("k", "title")
         t.log("one")

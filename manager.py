@@ -36,6 +36,17 @@ CONFIG_PATH = DATA_DIR / "config.json"
 HF_DEFAULT = "https://huggingface.co"
 PYTORCH_INDEX = "https://download.pytorch.org/whl/"
 MELO_GIT = "git+https://github.com/myshell-ai/MeloTTS.git"
+TOOLS_DIR = APP_DIR / "tools"          # ffmpeg lands here, see install_ffmpeg
+PIP_RAW_MIN = (24, 1)                  # first pip with --progress-bar raw
+
+
+def ensure_tools_path() -> None:
+    """Put tools/ first on PATH so shutil.which and child processes find
+    the ffmpeg the app installed, whatever the system has."""
+    if TOOLS_DIR.is_dir():
+        cur = os.environ.get("PATH", "")
+        if str(TOOLS_DIR) not in cur.split(os.pathsep):
+            os.environ["PATH"] = str(TOOLS_DIR) + os.pathsep + cur
 
 DEFAULT_CONFIG = {
     "version": "v2",            # which OpenVoice the Create page uses
@@ -210,9 +221,19 @@ def spawn(kind: str, title: str, fn, meta: dict | None = None) -> Task:
     return task
 
 
+PIP_PROGRESS = re.compile(r"^Progress (\d+) of (\d+)$")
+PIP_DOWNLOADING = re.compile(r"^\s*Downloading (\S+?)(?:\.metadata)? \(([\d.]+ [kMG]B)\)")
+
+
 def run_logged(task: Task, cmd: list[str], cwd: Path | None = None,
-               env: dict | None = None) -> int:
-    """Run a command, streaming its output into the task. Returns the exit code."""
+               env: dict | None = None, pip_progress: bool = False) -> int:
+    """Run a command, streaming its output into the task. Returns the exit code.
+
+    With pip_progress, pip's `--progress-bar raw` lines ("Progress N of M")
+    drive the task's bar and detail instead of flooding the log — off a
+    terminal pip otherwise shows nothing while a 500 MB wheel comes down,
+    which looks exactly like a hang.
+    """
     task.log("$ " + " ".join(cmd))
     full_env = dict(os.environ)
     full_env["PYTHONUNBUFFERED"] = "1"
@@ -223,9 +244,28 @@ def run_logged(task: Task, cmd: list[str], cwd: Path | None = None,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace")
     assert proc.stdout is not None
+    current = ""
+    last_logged = -1
     for line in proc.stdout:
         line = line.rstrip()
-        if line:
+        if not line:
+            continue
+        m = PIP_PROGRESS.match(line) if pip_progress else None
+        if m:
+            got, total = int(m.group(1)), int(m.group(2))
+            pct = got / total * 100 if total else None
+            task.set(pct=pct, detail=f"{current or 'download'}  {got / 1e6:.0f}/{total / 1e6:.0f} MB")
+            if total and got >= total and last_logged != total:
+                last_logged = total
+                task.log(f"  {current}: {total / 1e6:.0f} MB done")
+        else:
+            d = PIP_DOWNLOADING.match(line) if pip_progress else None
+            if d:
+                current = d.group(1)
+                last_logged = -1
+                task.set(pct=None, detail=f"Downloading {current} ({d.group(2)})")
+            elif pip_progress and line.startswith("Installing collected packages"):
+                task.set(pct=None, detail="Installing the downloaded packages")
             task.log(line)
         if task.cancel:
             proc.kill()
@@ -386,12 +426,14 @@ def deps(cfg: dict, fast: bool = False) -> list[dict]:
                     "3.10 or 3.11; V1 works here, V2 may not install"),
                 "installable": False})
 
+    ensure_tools_path()
     ff = shutil.which("ffmpeg")
     out.append({"id": "ffmpeg", "label": "ffmpeg", "state": "ok" if ff else "warn",
                 "detail": ff or "Not on PATH. Reference clips in mp3/m4a may fail to "
-                "decode; wav and flac are fine. Install from ffmpeg.org or "
-                "`winget install Gyan.FFmpeg`.",
-                "installable": False, "optional": True})
+                "decode; wav and flac are fine. Install puts a static build in the "
+                "app's tools/ folder (about 40 MB); `winget install Gyan.FFmpeg` "
+                "or ffmpeg.org work too, after a restart of the app.",
+                "installable": True, "optional": True})
 
     tf = torch_facts_cached(force=not fast)
     if not tf.get("installed"):
@@ -466,8 +508,20 @@ def deps(cfg: dict, fast: bool = False) -> list[dict]:
     return out
 
 
+def pip_version() -> tuple[int, int]:
+    m = re.match(r"(\d+)\.(\d+)", pkg_version("pip") or "0.0")
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+
 def pip(task: Task, args: list[str]) -> int:
-    return run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *args])
+    # The progress bar needs pip 24.1+. A venv made by an older Python ships an
+    # older pip; one small upgrade first, then every install shows progress.
+    if pip_version() < PIP_RAW_MIN:
+        task.log("Updating pip so downloads can show progress")
+        run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
+    extra = ["--progress-bar", "raw"] if pip_version() >= PIP_RAW_MIN else []
+    return run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *extra, *args],
+                      pip_progress=bool(extra))
 
 
 def install_torch(task: Task, build: str) -> None:
@@ -559,8 +613,42 @@ def install_wavmark(task: Task) -> None:
         raise RuntimeError(f"pip exited with {rc}")
 
 
+def install_ffmpeg(task: Task) -> None:
+    """A static ffmpeg through the imageio-ffmpeg wheel, copied into tools/.
+
+    pip is the one installer every machine here already has working, the
+    wheel carries a build for Windows, macOS and Linux, and tools/ goes on
+    PATH for the server and every engine it starts — so no system install,
+    no restart of the terminal, nothing outside the app folder.
+    """
+    task.set(detail="Fetching a static ffmpeg build (imageio-ffmpeg)")
+    rc = pip(task, ["imageio-ffmpeg"])
+    if rc != 0:
+        raise RuntimeError(f"pip exited with {rc}")
+    r = subprocess.run([sys.executable, "-c",
+                        "import imageio_ffmpeg;print(imageio_ffmpeg.get_ffmpeg_exe())"],
+                       capture_output=True, text=True, timeout=120)
+    src = Path((r.stdout or "").strip().splitlines()[-1]) if r.returncode == 0 and r.stdout.strip() else None
+    if not src or not src.is_file():
+        raise RuntimeError("imageio-ffmpeg installed but did not hand over a binary: "
+                           + (r.stderr or r.stdout).strip()[-300:])
+    TOOLS_DIR.mkdir(exist_ok=True)
+    dest = TOOLS_DIR / ("ffmpeg.exe" if platform.system() == "Windows" else "ffmpeg")
+    shutil.copy2(src, dest)
+    if platform.system() != "Windows":
+        dest.chmod(dest.stat().st_mode | 0o111)
+    ensure_tools_path()
+    r = subprocess.run([str(dest), "-version"], capture_output=True, text=True, timeout=30)
+    first = (r.stdout or r.stderr).strip().splitlines()[:1]
+    if r.returncode != 0:
+        raise RuntimeError("ffmpeg was copied but does not run: " + " ".join(first))
+    task.log(f"ffmpeg ready at {dest}: {first[0] if first else ''}")
+    task.log("The engine picks it up the next time it starts.")
+
+
 INSTALLERS = {
     "torch": install_torch,
+    "ffmpeg": install_ffmpeg,
     "engine": install_engine,
     "melo": install_melo,
     "unidic": install_unidic,

@@ -54,8 +54,11 @@ missing**:
 | MeloTTS | `pip install git+https://github.com/myshell-ai/MeloTTS.git`, the NLTK data its English front end wants, and the unidic dictionary (about 500 MB) — MeloTTS imports MeCab at start-up, so without it `import melo` fails for every language, not only Japanese. Needed for V2 only. |
 | Checkpoints | Fetched from HuggingFace on the Models page (see below) |
 
-Every install streams its output into the Activity panel, and the engine is
-stopped before an install so a half-imported PyTorch cannot wedge it.
+Every install streams its output into the Activity panel on the page you
+started it from, with a progress bar while a wheel is downloading (pip's own
+bar only shows on a terminal, so the app asks it for raw progress and draws
+its own). The engine is stopped before an install so a half-imported PyTorch
+cannot wedge it.
 
 ### Requirements
 
@@ -64,8 +67,9 @@ stopped before an install so a half-imported PyTorch cannot wedge it.
   the app and V1 work; MeloTTS will try to build from source and most likely
   fail.
 - Git (pip fetches MeloTTS from GitHub).
-- ffmpeg on PATH is recommended, for mp3/m4a reference clips. wav and flac
-  need nothing.
+- ffmpeg, for mp3/m4a reference clips (wav and flac need nothing). The
+  Engine page installs a static build into the app's `tools/` folder with
+  one button; a system ffmpeg on PATH works too.
 - An NVIDIA card with 8 GB runs everything here with room to spare. Less
   works with **Free GPU memory after each take** on. No card works too, on
   the CPU, slowly.
@@ -195,9 +199,12 @@ in `data/takes/`, voices in `data/voices/`, embeddings in `data/se/`.
 match the driver. Pick one by hand in the Engine page: cu128 needs driver
 570+, cu126 560+, cu121 is for older drivers. Update the driver if in doubt.
 
-**MeloTTS will not install** — almost always Python 3.12 or newer. Run the app
-on 3.11: install it, delete `.venv`, run `run.bat` / `run.sh` again (the
-launchers prefer 3.11 when it is there).
+**MeloTTS will not install** — almost always Python 3.12 or newer (the
+Python row on the Engine page says so). Run the app on 3.11: install it
+(`py install 3.11` on Windows, or python.org), delete the `.venv` folder,
+and run `run.bat` / `run.sh` again — the launchers prefer 3.11 when it is
+there, and on Windows `run.bat` offers to install it on a first run that
+finds only 3.12+.
 
 **"The card ran out of memory"** — rare on 8 GB, but another program may be
 holding most of it. Close it, or turn on Free GPU memory after each take.
@@ -211,8 +218,8 @@ not finish downloading. Press Install on its row in the Engine page.
 **The first line after a start takes a while** — it is loading the models.
 The next lines reuse them.
 
-**Reference clip in mp3 fails to decode** — install ffmpeg, or convert the
-clip to wav.
+**Reference clip in mp3 fails to decode** — press Install on the ffmpeg row
+of the Engine page, then restart the engine; or convert the clip to wav.
 
 ---
 

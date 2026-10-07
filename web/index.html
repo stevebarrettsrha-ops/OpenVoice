@@ -429,6 +429,16 @@
       <div class="gpu" id="gpuStats"></div>
       <div class="note" id="fitNote" style="margin:-4px 0 14px"></div>
 
+      <details class="card" id="engTaskCard" open hidden>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Activity
+          <div class="tools"><span class="pill" id="engTaskPill" hidden></span><button class="btn thin danger" id="engTaskCancel" hidden>Cancel</button></div></summary>
+        <div class="body">
+          <div class="prog" id="engTaskProg" hidden><i></i></div>
+          <div class="note" id="engTaskDetail" style="margin:0 0 8px"></div>
+          <div class="console" id="engTaskLog" style="height:180px"></div>
+        </div>
+      </details>
+
       <details class="card" open>
         <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Dependencies
           <div class="tools"><button class="btn thin" id="installAll">Install everything missing</button>
@@ -1055,9 +1065,17 @@ $("hfSave").addEventListener("click", async function () {
 
 /* ========================= tasks (installs, downloads) ========================= */
 var taskTimer = null;
+// The same activity shows on the Models page and the Engine page, so an
+// install started from either is watched where it was started.
+var TASK_PANELS = [
+  { pill: "taskPill", cancel: "taskCancel", detail: "taskDetail", prog: "taskProg", log: "taskLog", card: "taskCard" },
+  { pill: "engTaskPill", cancel: "engTaskCancel", detail: "engTaskDetail", prog: "engTaskProg", log: "engTaskLog", card: "engTaskCard" }
+];
 function watchTask(id) {
-  S.task = { id: id }; S.taskCursor = 0; $("taskLog").textContent = ""; $("taskCard").open = true;
+  S.task = { id: id }; S.taskCursor = 0;
+  TASK_PANELS.forEach(function (p) { $(p.log).textContent = ""; $(p.card).open = true; $(p.card).hidden = false; });
   if (S.view !== "models" && S.view !== "engine") show("models");
+  if (S.view === "engine") $("engTaskCard").scrollIntoView({ behavior: "smooth", block: "start" });
   pollTask();
 }
 async function pollTask() {
@@ -1065,16 +1083,21 @@ async function pollTask() {
   if (!S.task) return;
   var r; try { r = await api("/api/tasks/" + S.task.id + "?since=" + S.taskCursor); } catch (e) { return; }
   var t = r.task; S.taskCursor = t.cursor;
-  if (t.lines.length) { var log = $("taskLog"); log.textContent += t.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
-  $("taskPill").hidden = false; $("taskPill").textContent = t.title + " · " + t.state; $("taskPill").className = "pill " + (t.state === "done" ? "ok" : t.state === "error" ? "err" : t.state === "running" ? "warn" : "");
-  $("taskCancel").hidden = t.state !== "running"; $("taskDetail").textContent = t.detail || "";
-  $("taskProg").hidden = t.pct == null; if (t.pct != null) $("taskProg").firstElementChild.style.width = t.pct + "%";
+  TASK_PANELS.forEach(function (p) {
+    if (t.lines.length) { var log = $(p.log); log.textContent += t.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+    $(p.pill).hidden = false; $(p.pill).textContent = t.title + " · " + t.state;
+    $(p.pill).className = "pill " + (t.state === "done" ? "ok" : t.state === "error" ? "err" : t.state === "running" ? "warn" : "");
+    $(p.cancel).hidden = t.state !== "running"; $(p.detail).textContent = t.detail || "";
+    $(p.prog).hidden = t.pct == null; if (t.pct != null) $(p.prog).firstElementChild.style.width = t.pct + "%";
+  });
   if (t.state === "running") { taskTimer = setTimeout(pollTask, 800); return; }
   if (t.state === "done") toast(t.title + " finished"); else if (t.state === "error") toast(t.title + " failed: " + t.detail, true);
   S.task = null; loadStatus(false); loadDeps(false); loadModels(); loadBases();
   if (S._installQueue && S._installQueue.length) installNext();
 }
-$("taskCancel").addEventListener("click", async function () { if (S.task) await post("/api/tasks/" + S.task.id + "/cancel"); });
+TASK_PANELS.forEach(function (p) {
+  $(p.cancel).addEventListener("click", async function () { if (S.task) await post("/api/tasks/" + S.task.id + "/cancel"); });
+});
 async function resumeTasks() {
   try { var r = await api("/api/tasks"); var running = r.tasks.find(function (t) { return t.state === "running"; }); if (running) watchTask(running.id); } catch (e) { /* */ }
 }
@@ -1121,7 +1144,7 @@ async function loadDeps(fast) {
 async function installDep(id, el) {
   var body = {};
   if (id === "torch" && el) body.build = el.querySelector('[data-f="build"]').value;
-  try { var t = await post("/api/deps/" + id + "/install", body); watchTask(t.task.id); if (S.view !== "models") show("models"); }
+  try { var t = await post("/api/deps/" + id + "/install", body); watchTask(t.task.id); }
   catch (e) { toast(e.message, true); }
 }
 $("installAll").addEventListener("click", function () {

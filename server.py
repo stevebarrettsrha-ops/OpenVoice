@@ -44,6 +44,7 @@ MAX_LINES = 200
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024
 cfg = load_config()
+manager.ensure_tools_path()      # the ffmpeg the Engine page installed, if any
 
 # The base voices each version offers, before any model is loaded. V2 reads the
 # live speaker list from MeloTTS once a language is loaded, but the page needs

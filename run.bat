@@ -61,6 +61,37 @@ exit /b 1
 :haspy
 echo   Using: %PY%
 
+rem First run only, and only when the Python found is 3.12 or newer: MeloTTS
+rem (OpenVoice V2's voices) pins tokenizers 0.13, which has no wheels past
+rem 3.11, so offer 3.11 now rather than after a failed install. Declining
+rem keeps the Python found; V1 and the app itself run fine on it.
+if exist ".venv\Scripts\python.exe" goto skipoffer
+%PY% -c "import sys;raise SystemExit(0 if sys.version_info<(3,12) else 1)" >nul 2>nul
+if not errorlevel 1 goto skipoffer
+where winget >nul 2>nul
+if errorlevel 1 goto skipoffer
+echo.
+echo   This Python is 3.12 or newer. OpenVoice V2's voices (MeloTTS) only
+echo   install on 3.10 or 3.11. Python 3.11 can be added now through the
+echo   Python install manager; it sits beside your current Python.
+echo.
+choice /c YN /n /m "  Install Python 3.11 for this app? [Y/N] "
+if errorlevel 2 goto skipoffer
+echo.
+winget install 9NQ7512CXL7T --accept-package-agreements --accept-source-agreements
+py install 3.11
+call :findpy
+echo   Using: %PY%
+%PY% -c "import sys;raise SystemExit(0 if sys.version_info<(3,12) else 1)" >nul 2>nul
+if not errorlevel 1 goto skipoffer
+echo.
+echo   Python 3.11 is installed, but this window cannot see it yet.
+echo   Close it and run run.bat again.
+echo.
+pause
+exit /b 1
+
+:skipoffer
 rem Everything the app installs goes into .venv beside this file - Flask now,
 rem PyTorch and the models' packages later from the Engine page - so the Python
 rem that was found is left as it was found.
