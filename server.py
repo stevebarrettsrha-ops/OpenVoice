@@ -44,6 +44,7 @@ MAX_LINES = 200
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024
 cfg = load_config()
+manager.ensure_tools_path()      # the ffmpeg the Engine page installed, if any
 
 # The base voices each version offers, before any model is loaded. V2 reads the
 # live speaker list from MeloTTS once a language is loaded, but the page needs
@@ -71,6 +72,25 @@ V2_BASES = {
 # --------------------------------------------------------------------------- #
 class EngineError(Exception):
     pass
+
+
+def advice_for(text: str) -> str:
+    """One sentence for the failures people actually hit."""
+    t = text or ""
+    if "WinError 126" in t or "c10.dll" in t or "shm.dll" in t or "fbgemm.dll" in t:
+        return ("PyTorch's DLLs would not load: install the Microsoft Visual C++ "
+                "Redistributable (https://aka.ms/vs/17/release/vc_redist.x64.exe) and "
+                "restart the engine.")
+    if "No module named 'torch'" in t:
+        return "PyTorch is not installed in this app's environment: Engine page, PyTorch, Install."
+    if "No module named" in t:
+        return "A package is missing: press Install on 'OpenVoice packages' in the Engine page."
+    if "CUDA driver version is insufficient" in t or "cudaErrorInsufficientDriver" in t:
+        return ("The NVIDIA driver is older than this PyTorch build needs: update the "
+                "driver, or reinstall PyTorch picking an older CUDA build.")
+    if "out of memory" in t.lower():
+        return "The card ran out of memory: close other GPU programs or turn on 'Free GPU memory after each take'."
+    return ""
 
 
 class EngineProcess:
@@ -128,8 +148,10 @@ class EngineProcess:
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, encoding="utf-8", errors="replace", bufsize=1)
             self.started = time.time()
+            self._stderr_thread = threading.Thread(target=self._read_stderr, args=(self.proc,),
+                                                   daemon=True)
+            self._stderr_thread.start()
             threading.Thread(target=self._read_stdout, args=(self.proc,), daemon=True).start()
-            threading.Thread(target=self._read_stderr, args=(self.proc,), daemon=True).start()
             deadline = time.time() + 30
             while time.time() < deadline and self.state == "starting" and self.alive():
                 time.sleep(0.1)
@@ -227,11 +249,32 @@ class EngineProcess:
             code = proc.poll()
             if self.state != "stopped":
                 self.state = "error"
-                self.error = f"The engine exited (code {code}). See the console."
+                self.error = f"The engine exited (code {code}). {self.last_complaint()}".strip()
                 self.note(self.error)
             for fut in list(self.pending.values()):
                 fut["error"] = self.error or "The engine stopped"
                 fut["event"].set()
+
+    def last_complaint(self) -> str:
+        """The engine's own last words, so the error says *why* and not just *that*.
+
+        A crash on import prints a traceback to stderr and exits; the last
+        non-empty line of it names the problem (a DLL that would not load, a
+        missing module). Common Windows ones get a sentence of advice.
+        """
+        t = getattr(self, "_stderr_thread", None)
+        if t is not None:
+            t.join(timeout=2)
+        # Skip the app's own notes (they start with a [HH:MM:SS] stamp); keep
+        # everything the engine itself printed.
+        lines = [l for l in self.console[-40:]
+                 if l.strip() and not re.match(r"^\[\d\d:\d\d:\d\d\]", l)]
+        tail = lines[-1].strip() if lines else ""
+        for l in reversed(lines):
+            if "Error" in l or "error:" in l.lower():
+                tail = l.strip()
+                break
+        return (tail + " " + advice_for(tail)).strip() if tail else "See the console on the Engine page."
 
     def _read_stderr(self, proc: subprocess.Popen) -> None:
         assert proc.stderr is not None
@@ -678,7 +721,16 @@ def api_dep_install(dep_id: str):
 
     def wrapped(task):
         fn2(task)
-        manager.torch_facts_cached(force=True)
+        tf = manager.torch_facts_cached(force=True)
+        # The engine was stopped for the install; bring it back when there is
+        # a PyTorch to bring it back on, so the page does not sit on "stopped".
+        if tf.get("installed") and not tf.get("error"):
+            task.log("Starting the engine again")
+            try:
+                ENGINE.start()
+                task.log("Engine ready")
+            except EngineError as exc:
+                task.log(f"The engine did not start: {exc}")
 
     task = manager.spawn("install", f"Install {dep_id}", wrapped, {"dep": dep_id})
     return jsonify({"task": task.view()})

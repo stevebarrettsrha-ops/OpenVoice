@@ -263,6 +263,9 @@
   .playerbar .seek input::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#fff}
   .playerbar .seek input::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:#fff}
 
+  .engbad{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 26px 10px;padding:11px 14px;
+          border-radius:11px;background:#2a1719;border:1px solid #4a2328;color:#ffb3b3;font-size:13px;line-height:1.5}
+  .engbad span{flex:1;min-width:200px;word-break:break-word}
   #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#232329;color:#fff;
          padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;max-width:70vw;
          box-shadow:0 10px 30px -10px #000;border:1px solid var(--line)}
@@ -309,6 +312,11 @@
           </div>
         </div>
         <p class="note" style="text-align:center">OpenVoice clones the <b>tone colour</b> of a reference clip and speaks your text with it. Accent and emotion come from the base voice you pick, not from the clip.</p>
+      </div>
+      <div class="engbad" id="engBadHome" hidden style="max-width:680px;margin:18px auto 0">
+        <span id="engBadHomeText"></span>
+        <button class="btn thin" data-act="restart">Restart the engine</button>
+        <button class="btn thin" data-view="engine">Engine page</button>
       </div>
       <div class="banner" id="setupBanner" hidden>
         <h3 id="setupTitle">A few things to set up first</h3>
@@ -361,6 +369,11 @@
               <div class="ctl"><input type="text" id="optTitle" placeholder="first line, if empty" style="width:260px"></div></div>
           </div>
         </details>
+      </div>
+      <div class="engbad" id="engBadCreate" hidden>
+        <span id="engBadCreateText"></span>
+        <button class="btn thin" data-act="restart">Restart the engine</button>
+        <button class="btn thin" data-view="engine">Engine page</button>
       </div>
       <div class="createbar">
         <button class="primary" id="runBtn"><svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M5 3l14 9-14 9z"/></svg><span id="runLabel">Read the script</span></button>
@@ -428,6 +441,16 @@
       <h1 class="big" style="text-align:left;font-size:24px">Engine</h1>
       <div class="gpu" id="gpuStats"></div>
       <div class="note" id="fitNote" style="margin:-4px 0 14px"></div>
+
+      <details class="card" id="engTaskCard" open hidden>
+        <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Activity
+          <div class="tools"><span class="pill" id="engTaskPill" hidden></span><button class="btn thin danger" id="engTaskCancel" hidden>Cancel</button></div></summary>
+        <div class="body">
+          <div class="prog" id="engTaskProg" hidden><i></i></div>
+          <div class="note" id="engTaskDetail" style="margin:0 0 8px"></div>
+          <div class="console" id="engTaskLog" style="height:180px"></div>
+        </div>
+      </details>
 
       <details class="card" open>
         <summary><svg class="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Dependencies
@@ -578,6 +601,9 @@ async function loadStatus(fast) {
   pill.className = "statuspill " + (eng.state === "ready" ? (st.jobs_running ? "busy" : "on") : (eng.state === "error" ? "off" : ""));
   $("enginePillText").textContent = eng.state === "ready" ? (st.jobs_running ? "Engine · reading" : "Engine · ready")
     : eng.state === "starting" ? "Engine · starting" : eng.state === "error" ? "Engine · error" : "Engine · stopped";
+  pill.title = eng.state === "error" ? (eng.error || "") : "";
+  var badText = eng.state === "error" ? ("The engine is not running: " + (eng.error || "see the Engine page.")) : "";
+  ["engBadCreate", "engBadHome"].forEach(function (id) { $(id).hidden = !badText; $(id + "Text").textContent = badText; });
   var g = st.gpu || {};
   $("gpuPill").className = "statuspill " + (g.present ? "on" : "");
   $("gpuPillText").textContent = g.present ? (g.name || "GPU") + " · " + fmtSize(g.vram_total) : "No NVIDIA card found";
@@ -1055,9 +1081,17 @@ $("hfSave").addEventListener("click", async function () {
 
 /* ========================= tasks (installs, downloads) ========================= */
 var taskTimer = null;
+// The same activity shows on the Models page and the Engine page, so an
+// install started from either is watched where it was started.
+var TASK_PANELS = [
+  { pill: "taskPill", cancel: "taskCancel", detail: "taskDetail", prog: "taskProg", log: "taskLog", card: "taskCard" },
+  { pill: "engTaskPill", cancel: "engTaskCancel", detail: "engTaskDetail", prog: "engTaskProg", log: "engTaskLog", card: "engTaskCard" }
+];
 function watchTask(id) {
-  S.task = { id: id }; S.taskCursor = 0; $("taskLog").textContent = ""; $("taskCard").open = true;
+  S.task = { id: id }; S.taskCursor = 0;
+  TASK_PANELS.forEach(function (p) { $(p.log).textContent = ""; $(p.card).open = true; $(p.card).hidden = false; });
   if (S.view !== "models" && S.view !== "engine") show("models");
+  if (S.view === "engine") $("engTaskCard").scrollIntoView({ behavior: "smooth", block: "start" });
   pollTask();
 }
 async function pollTask() {
@@ -1065,16 +1099,21 @@ async function pollTask() {
   if (!S.task) return;
   var r; try { r = await api("/api/tasks/" + S.task.id + "?since=" + S.taskCursor); } catch (e) { return; }
   var t = r.task; S.taskCursor = t.cursor;
-  if (t.lines.length) { var log = $("taskLog"); log.textContent += t.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
-  $("taskPill").hidden = false; $("taskPill").textContent = t.title + " · " + t.state; $("taskPill").className = "pill " + (t.state === "done" ? "ok" : t.state === "error" ? "err" : t.state === "running" ? "warn" : "");
-  $("taskCancel").hidden = t.state !== "running"; $("taskDetail").textContent = t.detail || "";
-  $("taskProg").hidden = t.pct == null; if (t.pct != null) $("taskProg").firstElementChild.style.width = t.pct + "%";
+  TASK_PANELS.forEach(function (p) {
+    if (t.lines.length) { var log = $(p.log); log.textContent += t.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+    $(p.pill).hidden = false; $(p.pill).textContent = t.title + " · " + t.state;
+    $(p.pill).className = "pill " + (t.state === "done" ? "ok" : t.state === "error" ? "err" : t.state === "running" ? "warn" : "");
+    $(p.cancel).hidden = t.state !== "running"; $(p.detail).textContent = t.detail || "";
+    $(p.prog).hidden = t.pct == null; if (t.pct != null) $(p.prog).firstElementChild.style.width = t.pct + "%";
+  });
   if (t.state === "running") { taskTimer = setTimeout(pollTask, 800); return; }
   if (t.state === "done") toast(t.title + " finished"); else if (t.state === "error") toast(t.title + " failed: " + t.detail, true);
   S.task = null; loadStatus(false); loadDeps(false); loadModels(); loadBases();
   if (S._installQueue && S._installQueue.length) installNext();
 }
-$("taskCancel").addEventListener("click", async function () { if (S.task) await post("/api/tasks/" + S.task.id + "/cancel"); });
+TASK_PANELS.forEach(function (p) {
+  $(p.cancel).addEventListener("click", async function () { if (S.task) await post("/api/tasks/" + S.task.id + "/cancel"); });
+});
 async function resumeTasks() {
   try { var r = await api("/api/tasks"); var running = r.tasks.find(function (t) { return t.state === "running"; }); if (running) watchTask(running.id); } catch (e) { /* */ }
 }
@@ -1087,7 +1126,7 @@ function renderEngineStats() {
     { l: "Card", v: g.present ? g.name : "none found", s: g.present ? "driver " + g.driver : "nvidia-smi is not on PATH" },
     { l: "Card memory", v: g.present ? fmtSize(g.vram_total) : "—", s: g.present ? fmtSize(g.vram_used) + " in use" : "" },
     { l: "PyTorch", v: tf.installed ? (tf.version || "?") : "not installed", s: tf.error ? tf.error : tf.cuda ? "CUDA " + tf.cuda_version + " on " + tf.gpu : tf.installed ? "CPU only" : "" },
-    { l: "Engine", v: (st.engine || {}).state || "stopped", s: live.converter ? "converter " + live.converter + (live.vram_used ? " · " + fmtSize(live.vram_used) + " on the card" : "") : "" },
+    { l: "Engine", v: (st.engine || {}).state || "stopped", s: (st.engine || {}).state === "error" ? ((st.engine || {}).error || "") : live.converter ? "converter " + live.converter + (live.vram_used ? " · " + fmtSize(live.vram_used) + " on the card" : "") : "" },
     { l: "Python", v: st.python.version, s: st.python.melo_ok ? "MeloTTS installs here" : "3.10 or 3.11 needed for MeloTTS" }
   ];
   $("gpuStats").innerHTML = cards.map(function (c) { return '<div class="stat"><div class="l">' + esc(c.l) + '</div><div class="v" title="' + esc(c.v) + '">' + esc(c.v) + '</div><div class="s">' + esc(c.s) + "</div></div>"; }).join("");
@@ -1121,7 +1160,7 @@ async function loadDeps(fast) {
 async function installDep(id, el) {
   var body = {};
   if (id === "torch" && el) body.build = el.querySelector('[data-f="build"]').value;
-  try { var t = await post("/api/deps/" + id + "/install", body); watchTask(t.task.id); if (S.view !== "models") show("models"); }
+  try { var t = await post("/api/deps/" + id + "/install", body); watchTask(t.task.id); }
   catch (e) { toast(e.message, true); }
 }
 $("installAll").addEventListener("click", function () {
@@ -1142,6 +1181,9 @@ async function engineAction(what) {
   loadStatus(true); pollEngine();
 }
 $("engStart").addEventListener("click", function () { engineAction("start"); });
+document.querySelectorAll('.engbad [data-act="restart"]').forEach(function (b) {
+  b.addEventListener("click", function () { b.disabled = true; engineAction("restart").then(function () { b.disabled = false; }); });
+});
 $("engStop").addEventListener("click", function () { engineAction("stop"); });
 $("engRestart").addEventListener("click", function () { engineAction("restart"); });
 $("engFree").addEventListener("click", function () { engineAction("free"); });
