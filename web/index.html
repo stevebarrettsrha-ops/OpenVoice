@@ -263,6 +263,9 @@
   .playerbar .seek input::-webkit-slider-thumb{-webkit-appearance:none;width:11px;height:11px;border-radius:50%;background:#fff}
   .playerbar .seek input::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:#fff}
 
+  .engbad{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 26px 10px;padding:11px 14px;
+          border-radius:11px;background:#2a1719;border:1px solid #4a2328;color:#ffb3b3;font-size:13px;line-height:1.5}
+  .engbad span{flex:1;min-width:200px;word-break:break-word}
   #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:#232329;color:#fff;
          padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;max-width:70vw;
          box-shadow:0 10px 30px -10px #000;border:1px solid var(--line)}
@@ -309,6 +312,11 @@
           </div>
         </div>
         <p class="note" style="text-align:center">OpenVoice clones the <b>tone colour</b> of a reference clip and speaks your text with it. Accent and emotion come from the base voice you pick, not from the clip.</p>
+      </div>
+      <div class="engbad" id="engBadHome" hidden style="max-width:680px;margin:18px auto 0">
+        <span id="engBadHomeText"></span>
+        <button class="btn thin" data-act="restart">Restart the engine</button>
+        <button class="btn thin" data-view="engine">Engine page</button>
       </div>
       <div class="banner" id="setupBanner" hidden>
         <h3 id="setupTitle">A few things to set up first</h3>
@@ -361,6 +369,11 @@
               <div class="ctl"><input type="text" id="optTitle" placeholder="first line, if empty" style="width:260px"></div></div>
           </div>
         </details>
+      </div>
+      <div class="engbad" id="engBadCreate" hidden>
+        <span id="engBadCreateText"></span>
+        <button class="btn thin" data-act="restart">Restart the engine</button>
+        <button class="btn thin" data-view="engine">Engine page</button>
       </div>
       <div class="createbar">
         <button class="primary" id="runBtn"><svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M5 3l14 9-14 9z"/></svg><span id="runLabel">Read the script</span></button>
@@ -588,6 +601,9 @@ async function loadStatus(fast) {
   pill.className = "statuspill " + (eng.state === "ready" ? (st.jobs_running ? "busy" : "on") : (eng.state === "error" ? "off" : ""));
   $("enginePillText").textContent = eng.state === "ready" ? (st.jobs_running ? "Engine · reading" : "Engine · ready")
     : eng.state === "starting" ? "Engine · starting" : eng.state === "error" ? "Engine · error" : "Engine · stopped";
+  pill.title = eng.state === "error" ? (eng.error || "") : "";
+  var badText = eng.state === "error" ? ("The engine is not running: " + (eng.error || "see the Engine page.")) : "";
+  ["engBadCreate", "engBadHome"].forEach(function (id) { $(id).hidden = !badText; $(id + "Text").textContent = badText; });
   var g = st.gpu || {};
   $("gpuPill").className = "statuspill " + (g.present ? "on" : "");
   $("gpuPillText").textContent = g.present ? (g.name || "GPU") + " · " + fmtSize(g.vram_total) : "No NVIDIA card found";
@@ -1110,7 +1126,7 @@ function renderEngineStats() {
     { l: "Card", v: g.present ? g.name : "none found", s: g.present ? "driver " + g.driver : "nvidia-smi is not on PATH" },
     { l: "Card memory", v: g.present ? fmtSize(g.vram_total) : "—", s: g.present ? fmtSize(g.vram_used) + " in use" : "" },
     { l: "PyTorch", v: tf.installed ? (tf.version || "?") : "not installed", s: tf.error ? tf.error : tf.cuda ? "CUDA " + tf.cuda_version + " on " + tf.gpu : tf.installed ? "CPU only" : "" },
-    { l: "Engine", v: (st.engine || {}).state || "stopped", s: live.converter ? "converter " + live.converter + (live.vram_used ? " · " + fmtSize(live.vram_used) + " on the card" : "") : "" },
+    { l: "Engine", v: (st.engine || {}).state || "stopped", s: (st.engine || {}).state === "error" ? ((st.engine || {}).error || "") : live.converter ? "converter " + live.converter + (live.vram_used ? " · " + fmtSize(live.vram_used) + " on the card" : "") : "" },
     { l: "Python", v: st.python.version, s: st.python.melo_ok ? "MeloTTS installs here" : "3.10 or 3.11 needed for MeloTTS" }
   ];
   $("gpuStats").innerHTML = cards.map(function (c) { return '<div class="stat"><div class="l">' + esc(c.l) + '</div><div class="v" title="' + esc(c.v) + '">' + esc(c.v) + '</div><div class="s">' + esc(c.s) + "</div></div>"; }).join("");
@@ -1165,6 +1181,9 @@ async function engineAction(what) {
   loadStatus(true); pollEngine();
 }
 $("engStart").addEventListener("click", function () { engineAction("start"); });
+document.querySelectorAll('.engbad [data-act="restart"]').forEach(function (b) {
+  b.addEventListener("click", function () { b.disabled = true; engineAction("restart").then(function () { b.disabled = false; }); });
+});
 $("engStop").addEventListener("click", function () { engineAction("stop"); });
 $("engRestart").addEventListener("click", function () { engineAction("restart"); });
 $("engFree").addEventListener("click", function () { engineAction("free"); });

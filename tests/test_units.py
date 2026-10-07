@@ -73,6 +73,14 @@ class ScriptParsing(unittest.TestCase):
         self.assertEqual(lines[0]["speaker"], "Mei")
 
 
+class Advice(unittest.TestCase):
+    def test_known_failures_get_a_sentence(self):
+        self.assertIn("Visual C++", server.advice_for("OSError: [WinError 126] ... c10.dll"))
+        self.assertIn("Install", server.advice_for("ModuleNotFoundError: No module named 'torch'"))
+        self.assertIn("driver", server.advice_for("CUDA driver version is insufficient"))
+        self.assertEqual(server.advice_for("something else"), "")
+
+
 class LineValidation(unittest.TestCase):
     def test_rejects_empty_and_long(self):
         with self.assertRaises(ValueError):
@@ -251,6 +259,7 @@ class EngineProtocol(unittest.TestCase):
         time.sleep(0.2)
         self.assertEqual(e.state, "error")
         self.assertIn("exited", e.error)
+        self.assertIn("crashing on purpose", e.error)   # the engine's own last words
         # and it comes back
         e.start()
         self.assertEqual(e.state, "ready")
