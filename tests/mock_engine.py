@@ -19,7 +19,7 @@ import time
 import wave
 from pathlib import Path
 
-_PROTO = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1)
+_PROTO = sys.__stdout__       # same channel as engine.py
 sys.stdout = sys.stderr
 SR = 22050
 

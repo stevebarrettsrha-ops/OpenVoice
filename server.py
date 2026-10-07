@@ -157,17 +157,45 @@ class EngineProcess:
                 time.sleep(0.1)
             if not self.alive():
                 self.state = "error"
-                self.error = self.error or "The engine exited while starting. See the console."
+                self.error = self.error or ("The engine exited while starting. "
+                                            + self.last_complaint())
+                self.note(self.error)
                 raise EngineError(self.error)
+            if self.state == "starting":
+                # Every failure here is written to the console: an engine that
+                # went "error" with nothing said is what this used to do.
+                self.note("No ready signal from the engine after 30 s; asking it anyway")
+            t0 = time.time()
             try:
-                self.hello = self.call("hello", timeout=600)
+                self.hello = self.call("hello", timeout=300)
             except EngineError as exc:
                 self.state = "error"
                 self.error = str(exc)
+                if "did not answer" in self.error:
+                    self.error += (" — the worker is running but its replies are not "
+                                   "reaching the server. Press Restart; if it repeats, "
+                                   "the console lines above are the clue.")
+                self.note(self.error)
                 raise
+            self.state = "ready"
             self.note("Engine ready: PyTorch " + str(self.hello.get("torch")) +
                       (f" on {self.hello.get('gpu')}" if self.hello.get("cuda")
-                       else " (CPU)"))
+                       else " (CPU)") + f" · {time.time() - t0:.0f}s to load")
+
+    def start_async(self) -> None:
+        """Start without holding the HTTP request for the whole PyTorch import."""
+        t = getattr(self, "_start_thread", None)
+        if self.alive() or (t is not None and t.is_alive()):
+            return
+
+        def run():
+            try:
+                self.start()
+            except EngineError:
+                pass                        # already in self.error and the console
+
+        self._start_thread = threading.Thread(target=run, daemon=True)
+        self._start_thread.start()
 
     def stop(self) -> None:
         with self.lock:
@@ -832,10 +860,9 @@ def api_engine_log():
 
 @app.post("/api/engine/start")
 def api_engine_start():
-    try:
-        ENGINE.start()
-    except EngineError as exc:
-        return jsonify({"error": str(exc), "state": ENGINE.state}), 500
+    # Importing PyTorch on Windows can take a minute the first time; the page
+    # polls the state, so the request returns at once.
+    ENGINE.start_async()
     return jsonify({"ok": True, "state": ENGINE.state, "hello": ENGINE.hello})
 
 
@@ -849,10 +876,8 @@ def api_engine_stop():
 
 @app.post("/api/engine/restart")
 def api_engine_restart():
-    try:
-        ENGINE.restart()
-    except EngineError as exc:
-        return jsonify({"error": str(exc), "state": ENGINE.state}), 500
+    ENGINE.stop()
+    ENGINE.start_async()
     return jsonify({"ok": True, "state": ENGINE.state, "hello": ENGINE.hello})
 
 

@@ -45,8 +45,13 @@ sys.path.insert(0, str(APP_DIR))
 # The protocol owns stdout. OpenVoice and MeloTTS both print as they work, so
 # the real stdout is kept on a private handle and everything else is sent to
 # stderr, where the server reads it as the engine console.
-_PROTO = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8",
-                   buffering=1)
+# sys.__stdout__ is the original stream object, kept by Python itself — no
+# os.dup, no second handle on the pipe, which is where Windows gets picky.
+_PROTO = sys.__stdout__
+try:
+    _PROTO.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+except (AttributeError, ValueError):
+    pass
 sys.stdout = sys.stderr
 
 CKPT_V1 = APP_DIR / "checkpoints"
@@ -111,8 +116,11 @@ class Engine:
     # ------------------------------------------------------------------ #
     def import_torch(self):
         if self.torch is None:
+            log("Importing PyTorch (the first time on a machine can take a minute)")
+            t0 = time.time()
             import torch  # noqa: WPS433 - deliberately late
             self.torch = torch
+            log(f"PyTorch imported in {time.time() - t0:.1f}s")
             want = os.environ.get("OPENVOICE_DEVICE", "").strip().lower()
             if want in ("cpu", "cuda"):
                 self.device = want if (want == "cpu" or torch.cuda.is_available()) else "cpu"
@@ -127,9 +135,13 @@ class Engine:
                 "device": self.device, "python": sys.version.split()[0],
                 "gpu": "", "vram_total": 0}
         if torch.cuda.is_available():
-            props = torch.cuda.get_device_properties(0)
-            info["gpu"] = props.name
-            info["vram_total"] = int(props.total_memory)
+            try:
+                props = torch.cuda.get_device_properties(0)
+                info["gpu"] = props.name
+                info["vram_total"] = int(props.total_memory)
+            except Exception as exc:  # noqa: BLE001 - a card torch sees but cannot query
+                log(f"Could not read the card's properties: {exc}")
+                info["gpu"] = "NVIDIA (CUDA)"
             info["cuda_version"] = torch.version.cuda
         try:
             import melo  # noqa: F401
@@ -474,7 +486,8 @@ def main() -> None:
     q: "queue.Queue[dict | None]" = queue.Queue()
     threading.Thread(target=reader, args=(q, eng), daemon=True).start()
     send({"id": "", "event": "ready", "pid": os.getpid()})
-    log(f"Worker started (pid {os.getpid()}, Python {sys.version.split()[0]})")
+    log(f"Worker started (pid {os.getpid()}, Python {sys.version.split()[0]}); "
+        "waiting for the server's first command")
     while True:
         req = q.get()
         if req is None:
