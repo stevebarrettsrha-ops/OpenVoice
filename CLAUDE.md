@@ -25,6 +25,32 @@ leave it alone beyond bug fixes. The studio is `server.py`, `engine.py`,
    suite points `OPENVOICE_STUDIO_DATA` at a temp folder. Add a test when a
    fault ships.
 
+Borrowed from the sibling apps (Script Builder, Llama Studio, Ideogram
+Studio), where each was a fault that shipped:
+
+7. **Every Python child talks UTF-8 on its pipe, both ends.** The server sets
+   `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` on the engine and on every
+   pip run, and opens its pipes `encoding="utf-8", errors="replace"`; the
+   worker reconfigures `sys.__stdout__` the same way. Windows hands a piped
+   child the ANSI code page with strict errors, and OpenVoice prints IPA.
+8. **The console is plain text.** `plain()` strips ANSI escapes and `\r` from
+   engine stderr and from task logs; loguru and tqdm colour even into a pipe.
+9. **Long work reports a number.** pip gets `--progress-bar raw` and its
+   `Progress N of M` lines drive the task bar; a pip that rejects `raw` is
+   retried without it, never left failed. Model downloads carry byte
+   progress. `pct` is None until there is a real number.
+10. **Detection is by execution, not PATH lookup.** The launchers run each
+    Python candidate; `gpu_info` runs nvidia-smi from PATH and from the
+    places the driver puts it on Windows. A missing nvidia-smi is not a
+    missing card.
+11. **A dead engine is a sentence, not a stack trace.** Every way `start()`
+    can fail writes its reason to the console; the error carries the
+    worker's last complaint and, for the usual Windows causes, one line of
+    advice (`advice_for`). Home and Create show it with a Restart button.
+12. **The gate checks element ids.** `tests/check.py` lists every id the
+    inline script asks for and fails on one the markup lacks — the mismatch
+    that killed every button silently in two sibling apps.
+
 ## Gate before pushing
 
 ```

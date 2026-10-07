@@ -74,6 +74,15 @@ class EngineError(Exception):
     pass
 
 
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\r")
+
+
+def plain(line: str) -> str:
+    """The console is plain text: MeloTTS's loguru and tqdm colour their output
+    even into a pipe, and the page would print the escapes."""
+    return ANSI.sub("", line)
+
+
 def advice_for(text: str) -> str:
     """One sentence for the failures people actually hit."""
     t = text or ""
@@ -136,7 +145,11 @@ class EngineProcess:
             self.hello = {}
             env = dict(os.environ)
             env["PYTHONUNBUFFERED"] = "1"
+            # UTF-8 on both ends of the pipe (the TTS app's rule 2d): Windows
+            # hands a piped child the ANSI code page with strict errors, and
+            # OpenVoice prints IPA as it works — one "ð" and the worker dies.
             env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONUTF8"] = "1"
             dev = cfg.get("device", "auto")
             if dev in ("cpu", "cuda"):
                 env["OPENVOICE_DEVICE"] = dev
@@ -307,7 +320,7 @@ class EngineProcess:
     def _read_stderr(self, proc: subprocess.Popen) -> None:
         assert proc.stderr is not None
         for raw in proc.stderr:
-            raw = raw.rstrip()
+            raw = plain(raw.rstrip())
             if raw:
                 self.console.append(raw)
                 if len(self.console) > 3000:
