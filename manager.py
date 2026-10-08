@@ -438,8 +438,11 @@ def deps(cfg: dict, fast: bool = False) -> list[dict]:
                 "state": "ok" if py["melo_ok"] else "warn",
                 "detail": f"{py['version']} at {py['executable']}" + (
                     "" if py["melo_ok"] else
-                    " — MeloTTS (V2 voices) pins packages that only build on "
-                    "3.10 or 3.11; V1 works here, V2 may not install"),
+                    " — MeloTTS (V2 voices) only installs on 3.10 or 3.11. Close "
+                    "this app and run run.bat / run.sh again: it sets Python 3.11 "
+                    "up in the app's own environment (fetched if the machine has "
+                    "none) and rebuilds .venv on it. PyTorch and the packages then "
+                    "need installing again from this page."),
                 "installable": False})
 
     ensure_tools_path()

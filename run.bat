@@ -3,126 +3,118 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title OpenVoice Studio
 
-rem Flat control flow on purpose. Nested parenthesised blocks with delayed
+rem OpenVoice Studio runs on Python 3.10 or 3.11, in its own environment.
+rem
+rem MeloTTS (OpenVoice V2's base voices) pins packages that have wheels for
+rem those two versions only, so a 3.12+ venv can run the app and V1 but never
+rem V2. Rather than hope the machine has the right Python, this launcher:
+rem   1. uses a 3.11 or 3.10 already installed, if there is one;
+rem   2. otherwise fetches a managed CPython 3.11 through uv, into this app's
+rem      own folders - nothing touches the system Python;
+rem   3. builds .venv from it, and rebuilds a .venv that was made on 3.12+
+rem      (the old one is kept beside it, renamed).
+rem Set OPENVOICE_STUDIO_FORCE_UV=1 to take route 2 even when route 1 would do.
+rem
+rem Flat control flow on purpose: nested parenthesised blocks with delayed
 rem expansion are where batch fails silently, so every branch is a label.
 
-call :findpy
+set "VENV=.venv"
+set "UVENV=.uvenv"
+set "USE_UV="
+set "PY="
+
+if defined OPENVOICE_STUDIO_FORCE_UV goto needuv
+call :findwanted
 if defined PY goto haspy
 
+:needuv
+call :findany
+if defined BOOT goto haveboot
 echo.
-echo   Python 3.10 or newer was not found.
-echo.
-
-where winget >nul 2>nul
-if errorlevel 1 goto manualpy
-
-echo   WinGet is here, so this can be done for you: the Python install manager
-echo   from the Microsoft Store, then Python 3.11 through it.
-echo   (3.11 rather than the newest: MeloTTS, which gives OpenVoice V2 its
-echo   voices, only installs cleanly on 3.10 and 3.11.)
-echo.
-choice /c YN /n /m "  Install Python now? [Y/N] "
-if errorlevel 2 goto declined
-
-echo.
-echo   Installing the Python install manager...
-winget install 9NQ7512CXL7T --accept-package-agreements --accept-source-agreements
-echo.
-echo   Installing Python 3.11...
-py install 3.11
-
-call :findpy
-if defined PY goto haspy
-goto restartneeded
-
-:manualpy
-echo   Install Python 3.11 from https://www.python.org/downloads/ and tick
-echo   "Add python.exe to PATH" during setup, then run this file again.
+echo   No Python was found at all. Install Python 3.11 from
+echo   https://www.python.org/downloads/ (tick "Add python.exe to PATH"),
+echo   then run this file again.
 echo.
 pause
 exit /b 1
 
-:declined
-echo.
-echo   Nothing was installed. Get Python 3.11 from
-echo   https://www.python.org/downloads/ and run this file again.
-echo.
-pause
-exit /b 1
-
-:restartneeded
-echo.
-echo   Python is installed, but this window cannot see it yet.
-echo   Close it and run run.bat again.
-echo.
-pause
-exit /b 1
+:haveboot
+echo   No Python 3.10 or 3.11 on this machine. OpenVoice V2's voices need one,
+echo   so Python 3.11 will be fetched into this app's own environment.
+echo   Your system Python is not touched.
+if exist "%UVENV%\Scripts\uv.exe" goto haveuv
+echo   Setting up uv (the fetcher) ...
+if exist "%UVENV%" rmdir /s /q "%UVENV%"
+%BOOT% -m venv "%UVENV%"
+if errorlevel 1 goto uvfail
+"%UVENV%\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet uv
+if errorlevel 1 goto uvfail
+:haveuv
+set "UV=%UVENV%\Scripts\uv.exe"
+echo   Fetching Python 3.11 (about 30 MB, kept under uv's data folder) ...
+"%UV%" python install 3.11
+if errorlevel 1 goto uvfail
+set "USE_UV=1"
+goto venv
 
 :haspy
 echo   Using: %PY%
 
-rem First run only, and only when the Python found is 3.12 or newer: MeloTTS
-rem (OpenVoice V2's voices) pins tokenizers 0.13, which has no wheels past
-rem 3.11, so offer 3.11 now rather than after a failed install. Declining
-rem keeps the Python found; V1 and the app itself run fine on it.
-if exist ".venv\Scripts\python.exe" goto skipoffer
-%PY% -c "import sys;raise SystemExit(0 if sys.version_info<(3,12) else 1)" >nul 2>nul
-if not errorlevel 1 goto skipoffer
-where winget >nul 2>nul
-if errorlevel 1 goto skipoffer
-echo.
-echo   This Python is 3.12 or newer. OpenVoice V2's voices (MeloTTS) only
-echo   install on 3.10 or 3.11. Python 3.11 can be added now through the
-echo   Python install manager; it sits beside your current Python.
-echo.
-choice /c YN /n /m "  Install Python 3.11 for this app? [Y/N] "
-if errorlevel 2 goto skipoffer
-echo.
-winget install 9NQ7512CXL7T --accept-package-agreements --accept-source-agreements
-py install 3.11
-call :findpy
-echo   Using: %PY%
-%PY% -c "import sys;raise SystemExit(0 if sys.version_info<(3,12) else 1)" >nul 2>nul
-if not errorlevel 1 goto skipoffer
-echo.
-echo   Python 3.11 is installed, but this window cannot see it yet.
-echo   Close it and run run.bat again.
-echo.
-pause
-exit /b 1
+:venv
+rem A .venv made on 3.12+ cannot run V2: set it aside and build afresh.
+if not exist "%VENV%\Scripts\python.exe" goto makevenv
+set "HAVE="
+for /f "delims=" %%V in ('"%VENV%\Scripts\python.exe" -c "import sys;print('%%d.%%d'%%sys.version_info[:2])" 2^>nul') do set "HAVE=%%V"
+if "!HAVE!"=="3.10" goto checkpip
+if "!HAVE!"=="3.11" goto checkpip
+echo   The existing environment is Python !HAVE!. Setting it aside as %VENV%-py!HAVE!
+echo   and building a fresh one on 3.11/3.10 (PyTorch and the models' packages
+echo   will need installing again from the Engine page).
+if exist "%VENV%-py!HAVE!" rmdir /s /q "%VENV%-py!HAVE!"
+move "%VENV%" "%VENV%-py!HAVE!" >nul
+goto makevenv
 
-:skipoffer
-rem Everything the app installs goes into .venv beside this file - Flask now,
-rem PyTorch and the models' packages later from the Engine page - so the Python
-rem that was found is left as it was found.
-if not exist ".venv\Scripts\python.exe" goto makevenv
-".venv\Scripts\python.exe" -m pip --version >nul 2>nul
+:checkpip
+"%VENV%\Scripts\python.exe" -m pip --version >nul 2>nul
 if not errorlevel 1 goto hasvenv
 echo   The existing environment is incomplete. Building it again.
-rmdir /s /q ".venv"
+rmdir /s /q "%VENV%"
 
 :makevenv
 echo   Setting up OpenVoice Studio's environment (first run only)...
-%PY% -m venv .venv
+if defined USE_UV goto uvvenv
+%PY% -m venv "%VENV%"
 if errorlevel 1 goto badvenv
-".venv\Scripts\python.exe" -m pip --version >nul 2>nul
+"%VENV%\Scripts\python.exe" -m pip --version >nul 2>nul
 if errorlevel 1 goto badvenv
+goto hasvenv
+
+:uvvenv
+"%UV%" venv --seed --python 3.11 "%VENV%"
+if errorlevel 1 goto uvfail
 
 :hasvenv
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -r requirements.txt
+for /f "delims=" %%V in ('"%VENV%\Scripts\python.exe" -c "import sys;print('%%d.%%d'%%sys.version_info[:2])" 2^>nul') do set "HAVE=%%V"
+echo   Environment: Python !HAVE! in %VENV%
+"%VENV%\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -r requirements.txt
 if errorlevel 1 goto pipfail
-".venv\Scripts\python.exe" server.py
+"%VENV%\Scripts\python.exe" server.py
 pause
 exit /b 0
 
 :badvenv
-if exist ".venv" rmdir /s /q ".venv"
-echo   Could not build a separate environment; using %PY% as it is.
-%PY% -m pip install --disable-pip-version-check --quiet -r requirements.txt
-if errorlevel 1 goto pipfail
-%PY% server.py
+if exist "%VENV%" rmdir /s /q "%VENV%"
+echo   Could not build the environment with %PY%. Trying the fetched Python instead.
+goto needuv
+
+:uvfail
+echo.
+echo   Could not fetch Python 3.11. Install it by hand from
+echo   https://www.python.org/downloads/release/python-3119/ (tick "Add
+echo   python.exe to PATH"), then run this file again.
+echo.
 pause
-exit /b 0
+exit /b 1
 
 :pipfail
 echo   Could not install the Python packages. Check your internet connection.
@@ -130,15 +122,25 @@ pause
 exit /b 1
 
 rem --------------------------------------------------------------------- rem
-rem Sets PY to the first interpreter that is really 3.10+, preferring 3.11 and
-rem 3.10 (see above). Tested by running each one: Microsoft Store stubs answer
-rem `where` and then fail on execution.
-:findpy
+rem Sets PY to a 3.11 or 3.10 interpreter, tested by running it: Microsoft
+rem Store stubs answer `where` and then fail on execution.
+:findwanted
 set "PY="
-for %%C in ("py -3.11" "py -3.10" "py -3.12" "py -3.13" "py -3" "python") do (
+for %%C in ("py -3.11" "py -3.10" "python3.11" "python3.10" "python") do (
   if not defined PY (
-    %%~C -c "import sys;raise SystemExit(0 if sys.version_info>=(3,10) else 1)" >nul 2>nul
+    %%~C -c "import sys;raise SystemExit(0 if (3,10)<=sys.version_info[:2]<=(3,11) else 1)" >nul 2>nul
     if !errorlevel! equ 0 set "PY=%%~C"
+  )
+)
+exit /b 0
+
+rem Sets BOOT to any Python 3.8+, enough to bootstrap uv.
+:findany
+set "BOOT="
+for %%C in ("py -3" "python" "py -3.13" "py -3.12" "py -3.11" "py -3.10" "py -3.9" "py -3.8") do (
+  if not defined BOOT (
+    %%~C -c "import sys;raise SystemExit(0 if sys.version_info>=(3,8) else 1)" >nul 2>nul
+    if !errorlevel! equ 0 set "BOOT=%%~C"
   )
 )
 exit /b 0
