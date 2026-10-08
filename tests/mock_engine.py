@@ -54,6 +54,8 @@ def main():
             send({"id": rid, "ok": False, "error": f"mock failure in {cmd}"})
             continue
         if cmd == "hello":
+            # MOCK_ENGINE_SLOW_HELLO=<seconds>: a PyTorch import that crawls
+            time.sleep(float(os.environ.get("MOCK_ENGINE_SLOW_HELLO", "0") or 0))
             send({"id": rid, "ok": True, "result": {"torch": "0.0-mock", "cuda": False,
                                                     "device": "cpu", "gpu": "", "melo": True}})
         elif cmd == "status":

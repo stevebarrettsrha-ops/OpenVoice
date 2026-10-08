@@ -600,7 +600,7 @@ async function loadStatus(fast) {
   var st = S.status, eng = st.engine || {}, pill = $("enginePill");
   pill.className = "statuspill " + (eng.state === "ready" ? (st.jobs_running ? "busy" : "on") : (eng.state === "error" ? "off" : ""));
   $("enginePillText").textContent = eng.state === "ready" ? (st.jobs_running ? "Engine · reading" : "Engine · ready")
-    : eng.state === "starting" ? "Engine · starting" : eng.state === "error" ? "Engine · error" : "Engine · stopped";
+    : eng.state === "starting" ? "Engine · starting " + fmtTime(eng.since || 0) : eng.state === "error" ? "Engine · error" : "Engine · stopped";
   pill.title = eng.state === "error" ? (eng.error || "") : "";
   var badText = eng.state === "error" ? ("The engine is not running: " + (eng.error || "see the Engine page.")) : "";
   ["engBadCreate", "engBadHome"].forEach(function (id) { $(id).hidden = !badText; $(id + "Text").textContent = badText; });
@@ -1134,7 +1134,7 @@ function renderEngineStats() {
   if (!g.present) fit.innerHTML = "No NVIDIA card was found, so everything runs on the CPU. It works, but a line takes a good while.";
   else if (g.vram_total && g.vram_total < 3 * 1024 * 1024 * 1024) fit.innerHTML = '<span class="warn-text">This card has under 3 GB.</span> OpenVoice itself fits, but keep <b>Free GPU memory after each take</b> on and close other GPU programs.';
   else fit.innerHTML = "OpenVoice is small: the converter and one base voice take <b>under 1 GB</b> of card memory, so an 8 GB card such as an RTX 4060 runs V1 and V2 with room to spare. The whole stack never needs more than about 2 GB.";
-  $("engState").textContent = (st.engine || {}).state || "stopped";
+  $("engState").textContent = ((st.engine || {}).state || "stopped") + ((st.engine || {}).state === "starting" ? " " + fmtTime((st.engine || {}).since || 0) : "");
   $("engState").className = "pill " + ((st.engine || {}).state === "ready" ? "ok" : (st.engine || {}).state === "error" ? "err" : "");
   var h = (st.engine || {}).hello || {};
   $("engHello").textContent = h.torch ? "PyTorch " + h.torch + (h.cuda ? " on " + h.gpu : " (CPU)") + (h.melo ? " · MeloTTS present" : " · no MeloTTS") : "";

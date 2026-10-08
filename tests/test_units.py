@@ -213,13 +213,13 @@ class ManagerBits(unittest.TestCase):
 class EngineProtocol(unittest.TestCase):
     def setUp(self):
         server.ENGINE.stop()
-        os.environ.pop("MOCK_ENGINE_FAIL", None)
-        os.environ.pop("MOCK_ENGINE_CRASH", None)
+        for k in ("MOCK_ENGINE_FAIL", "MOCK_ENGINE_CRASH", "MOCK_ENGINE_SLOW_HELLO"):
+            os.environ.pop(k, None)
 
     def tearDown(self):
         server.ENGINE.stop()
-        os.environ.pop("MOCK_ENGINE_FAIL", None)
-        os.environ.pop("MOCK_ENGINE_CRASH", None)
+        for k in ("MOCK_ENGINE_FAIL", "MOCK_ENGINE_CRASH", "MOCK_ENGINE_SLOW_HELLO"):
+            os.environ.pop(k, None)
 
     def test_start_hello_speak_stop(self):
         e = server.ENGINE
@@ -248,6 +248,31 @@ class EngineProtocol(unittest.TestCase):
             e.call("speak", version="v2", out_dir=_SANDBOX, lines=[{"text": "a"}])
         self.assertIn("mock failure", str(cm.exception))
         self.assertTrue(e.alive())          # one failed command does not kill it
+
+    def test_stop_does_not_wait_behind_a_slow_start(self):
+        os.environ["MOCK_ENGINE_SLOW_HELLO"] = "20"
+        e = server.ENGINE
+        threading.Thread(target=lambda: self._swallow(e.start), daemon=True).start()
+        for _ in range(100):
+            if e.state == "starting" and e.alive():
+                break
+            time.sleep(0.05)
+        self.assertEqual(e.state, "starting")
+        t0 = time.time()
+        e.stop()
+        self.assertLess(time.time() - t0, 5)         # not the 20 s hello
+        self.assertEqual(e.state, "stopped")
+        self.assertFalse(e.alive())
+        os.environ.pop("MOCK_ENGINE_SLOW_HELLO", None)
+        e.start()                                    # and it comes back clean
+        self.assertEqual(e.state, "ready")
+
+    @staticmethod
+    def _swallow(fn):
+        try:
+            fn()
+        except server.EngineError:
+            pass
 
     def test_crash_mid_command_fails_the_call_and_marks_state(self):
         os.environ["MOCK_ENGINE_CRASH"] = "1"

@@ -372,14 +372,19 @@ def torch_facts() -> dict:
 
 
 _torch_cache: dict = {"at": 0.0, "value": None}
+_torch_lock = threading.Lock()
 
 
 def torch_facts_cached(force: bool = False) -> dict:
-    now = time.time()
-    if force or _torch_cache["value"] is None or now - _torch_cache["at"] > 60:
-        _torch_cache["value"] = torch_facts()
-        _torch_cache["at"] = now
-    return _torch_cache["value"]
+    # One probe at a time: at boot the engine starter and the page's first
+    # status call both ask, and two concurrent `import torch` subprocesses
+    # double the wait on a cold disk for the same answer.
+    with _torch_lock:
+        now = time.time()
+        if force or _torch_cache["value"] is None or now - _torch_cache["at"] > 60:
+            _torch_cache["value"] = torch_facts()
+            _torch_cache["at"] = now
+        return _torch_cache["value"]
 
 
 def importable(mod: str) -> bool:
