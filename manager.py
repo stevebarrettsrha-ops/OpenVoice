@@ -574,6 +574,10 @@ def pip_retry_reason(lines: list[str]) -> str:
     return ""
 
 
+def cfg_build() -> str:
+    return load_config().get("torch_build", "auto") or "auto"
+
+
 def install_torch(task: Task, build: str) -> None:
     gpu = gpu_info()
     if build == "auto" or not build:
@@ -618,10 +622,25 @@ def install_melo(task: Task) -> None:
     if not shutil.which("git"):
         raise RuntimeError("git is not installed, and pip needs it to fetch MeloTTS. "
                            "Install Git from git-scm.com and try again.")
+    # MeloTTS lists torch and torchaudio with no build, so with no PyTorch in
+    # place pip would fetch PyPI's — the CPU build, on Windows. Put the right
+    # one in first; an installed build satisfies the requirement and stays.
+    before = torch_facts_cached(force=True)
+    if not before.get("installed") or before.get("error"):
+        task.log("PyTorch is not installed yet; installing it first so MeloTTS "
+                 "does not pull a CPU build")
+        install_torch(task, cfg_build())
     task.set(detail="Installing MeloTTS from GitHub")
     rc = pip(task, [MELO_GIT])
     if rc != 0:
         raise RuntimeError(f"pip exited with {rc}")
+    # Rule 5c from the sibling apps: check the build is still the one we want.
+    after = torch_facts_cached(force=True)
+    gpu = gpu_info()
+    if gpu.get("present") and after.get("installed") and not after.get("cuda"):
+        task.log(f"MeloTTS's dependencies replaced PyTorch with a CPU build "
+                 f"({after.get('version')}); putting the CUDA build back")
+        install_torch(task, cfg_build())
     # MeloTTS's English front end wants two NLTK corpora it fetches on first
     # use; doing it here means the first take does not stall on a download.
     task.set(detail="Fetching the NLTK data MeloTTS English needs")
