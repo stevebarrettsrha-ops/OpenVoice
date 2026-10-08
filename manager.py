@@ -221,6 +221,7 @@ def spawn(kind: str, title: str, fn, meta: dict | None = None) -> Task:
     return task
 
 
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\r")
 PIP_PROGRESS = re.compile(r"^Progress (\d+) of (\d+)$")
 PIP_DOWNLOADING = re.compile(r"^\s*Downloading (\S+?)(?:\.metadata)? \(([\d.]+ [kMG]B)\)")
 
@@ -238,6 +239,8 @@ def run_logged(task: Task, cmd: list[str], cwd: Path | None = None,
     full_env = dict(os.environ)
     full_env["PYTHONUNBUFFERED"] = "1"
     full_env["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
+    full_env["PYTHONIOENCODING"] = "utf-8"      # both ends UTF-8, see server.py
+    full_env["PYTHONUTF8"] = "1"
     if env:
         full_env.update(env)
     proc = subprocess.Popen(cmd, cwd=str(cwd or APP_DIR), env=full_env,
@@ -247,7 +250,7 @@ def run_logged(task: Task, cmd: list[str], cwd: Path | None = None,
     current = ""
     last_logged = -1
     for line in proc.stdout:
-        line = line.rstrip()
+        line = ANSI.sub("", line.rstrip())
         if not line:
             continue
         m = PIP_PROGRESS.match(line) if pip_progress else None
@@ -300,6 +303,14 @@ def gpu_info() -> dict:
     install will work with the driver.
     """
     smi = shutil.which("nvidia-smi")
+    if not smi and platform.system() == "Windows":
+        # Where the driver puts it when PATH does not say (rule 5b of the TTS app).
+        for cand in (Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvidia-smi.exe",
+                     Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+                     / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"):
+            if cand.is_file():
+                smi = str(cand)
+                break
     if not smi:
         return {"present": False}
     try:
@@ -520,8 +531,14 @@ def pip(task: Task, args: list[str]) -> int:
         task.log("Updating pip so downloads can show progress")
         run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     extra = ["--progress-bar", "raw"] if pip_version() >= PIP_RAW_MIN else []
-    return run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *extra, *args],
-                      pip_progress=bool(extra))
+    rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *extra, *args],
+                    pip_progress=bool(extra))
+    # A pip that does not know "raw" exits with "invalid choice" before doing
+    # anything; losing the bar is fine, losing the install is not.
+    if rc != 0 and extra and any("invalid choice: 'raw'" in l for l in task.lines[-5:]):
+        task.log("This pip has no raw progress mode; installing without a bar")
+        rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *args])
+    return rc
 
 
 def install_torch(task: Task, build: str) -> None:

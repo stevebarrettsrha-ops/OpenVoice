@@ -56,6 +56,16 @@ elif shutil.which("node"):
 else:
     print("skip the inline script parses (node is not on PATH)")
 
+# Every id the script asks for by $("...") / getElementById must exist in the
+# markup: a missing one throws at boot and every button dies silently. This
+# mismatch has broken two sibling apps.
+ids_in_markup = set(re.findall(r'\bid="([^"]+)"', re.sub(r"<script>[\s\S]*?</script>", "", html)))
+ids_in_script = set(re.findall(r'\$\("([A-Za-z0-9_-]+)"\)', "\n".join(blocks)))
+ids_in_script |= set(re.findall(r'getElementById\("([A-Za-z0-9_-]+)"\)', "\n".join(blocks)))
+missing = sorted(ids_in_script - ids_in_markup)
+step("every element id the script uses exists in the markup",
+     "missing: " + ", ".join(missing) if missing else None)
+
 step("the page has one script and no build step",
      "web/index.html pulls in an external script" if re.search(r"<script[^>]+src=", html) else None)
 
