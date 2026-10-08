@@ -536,14 +536,39 @@ def pip(task: Task, args: list[str]) -> int:
         task.log("Updating pip so downloads can show progress")
         run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     extra = ["--progress-bar", "raw"] if pip_version() >= PIP_RAW_MIN else []
-    rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *extra, *args],
-                    pip_progress=bool(extra))
-    # A pip that does not know "raw" exits with "invalid choice" before doing
-    # anything; losing the bar is fine, losing the install is not.
-    if rc != 0 and extra and any("invalid choice: 'raw'" in l for l in task.lines[-5:]):
-        task.log("This pip has no raw progress mode; installing without a bar")
-        rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *args])
+    cache: list[str] = []
+    for attempt in range(3):
+        rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade",
+                               *extra, *cache, *args], pip_progress=bool(extra))
+        if rc == 0:
+            return 0
+        why = pip_retry_reason(task.lines)
+        if why == "raw" and extra:
+            # A pip that does not know "raw" exits with "invalid choice" before
+            # doing anything; losing the bar is fine, losing the install is not.
+            task.log("This pip has no raw progress mode; installing without a bar")
+            extra = []
+        elif why == "cache" and not cache:
+            # pip refused a wheel because the copy in its own HTTP cache no
+            # longer matches the index's hash — a half-written cache entry, or
+            # something on the way (an antivirus, a proxy) rewrote it. The
+            # wheel itself is fine; fetching it fresh is the whole fix.
+            task.log("pip's cache handed back a file that does not match its hash; "
+                     "fetching fresh copies instead of the cache")
+            cache = ["--no-cache-dir"]
+        else:
+            return rc
     return rc
+
+
+def pip_retry_reason(lines: list[str]) -> str:
+    """What the last pip run tripped on, when it is something a retry fixes."""
+    tail = "\n".join(lines[-20:])
+    if "invalid choice: 'raw'" in tail:
+        return "raw"
+    if "DO NOT MATCH THE HASHES" in tail or "HashMismatch" in tail:
+        return "cache"
+    return ""
 
 
 def install_torch(task: Task, build: str) -> None:

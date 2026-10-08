@@ -199,6 +199,11 @@ in `data/takes/`, voices in `data/voices/`, embeddings in `data/se/`.
 match the driver. Pick one by hand in the Engine page: cu128 needs driver
 570+, cu126 560+, cu121 is for older drivers. Update the driver if in doubt.
 
+**"THESE PACKAGES DO NOT MATCH THE HASHES"** in an install log — pip's own
+download cache handed back a damaged copy of a wheel. The installer retries
+without the cache by itself; if you are installing by hand, add
+`--no-cache-dir`, or run `pip cache purge` once.
+
 **MeloTTS will not install** — almost always Python 3.12 or newer (the
 Python row on the Engine page says so). Run the app on 3.11: install it
 (`py install 3.11` on Windows, or python.org), delete the `.venv` folder,
