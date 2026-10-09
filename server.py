@@ -155,8 +155,8 @@ class EngineProcess:
             dev = cfg.get("device", "auto")
             if dev in ("cpu", "cuda"):
                 env["OPENVOICE_DEVICE"] = dev
-            else:
-                env.pop("OPENVOICE_DEVICE", None)
+            # Auto honors an explicit launcher environment override. Removing
+            # it here made the documented CPU fallback silently run on CUDA.
             self.note(f"Starting the engine: {sys.executable} {ENGINE_SCRIPT.name}")
             self.proc = subprocess.Popen(
                 [sys.executable, str(ENGINE_SCRIPT)], cwd=str(APP_DIR), env=env,

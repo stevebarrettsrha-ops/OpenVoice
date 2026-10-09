@@ -79,7 +79,7 @@ MODELS = {
                  "English (5 accents), Spanish, French, Chinese, Japanese and "
                  "Korean. The base voices themselves come from MeloTTS.",
         "size": "about 140 MB",
-        "vram": "under 1 GB with one MeloTTS voice loaded",
+        "vram": "depends on Melo language, BERT features and line length; 8 GB target",
     },
     "v1": {
         "label": "OpenVoice V1",

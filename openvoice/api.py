@@ -9,6 +9,7 @@ import librosa
 from openvoice.text import text_to_sequence
 from openvoice.mel_processing import spectrogram_torch
 from openvoice.models import SynthesizerTrn
+from openvoice.audio_processing import convert_in_chunks
 
 
 class OpenVoiceBaseClass(object):
@@ -33,7 +34,9 @@ class OpenVoiceBaseClass(object):
         self.device = device
 
     def load_ckpt(self, ckpt_path):
-        checkpoint_dict = torch.load(ckpt_path, map_location=torch.device(self.device))
+        # The model already lives on its target device. Loading the checkpoint
+        # there too briefly holds a second full set of weights on the card.
+        checkpoint_dict = torch.load(ckpt_path, map_location='cpu')
         a, b = self.model.load_state_dict(checkpoint_dict['model'], strict=False)
         print("Loaded checkpoint '{}'".format(ckpt_path))
         print('missing/unexpected keys:', a, b)
@@ -141,12 +144,27 @@ class ToneColorConverter(OpenVoiceBaseClass):
 
         return gs
 
-    def convert(self, audio_src_path, src_se, tgt_se, output_path=None, tau=0.3, message="default"):
+    def convert(self, audio_src_path, src_se, tgt_se, output_path=None, tau=0.3, message="default", check_cancel=None):
         hps = self.hps
-        # load audio
+        # Melo splits long text for synthesis, but rejoins it in this file.
+        # Bound conversion activations independently of the whole line length.
         audio, sample_rate = librosa.load(audio_src_path, sr=hps.data.sampling_rate)
-        audio = torch.tensor(audio).float()
-        
+        def convert_window(part):
+            if check_cancel is not None:
+                check_cancel()
+            return self._convert_audio(part, src_se, tgt_se, tau)
+
+        audio = convert_in_chunks(
+            audio, convert_window,
+            hps.data.sampling_rate, hps.data.hop_length)
+        audio = self.add_watermark(audio, message)
+        if output_path is None:
+            return audio
+        soundfile.write(output_path, audio, hps.data.sampling_rate)
+
+    def _convert_audio(self, audio, src_se, tgt_se, tau):
+        """Convert one bounded window; all tensor locals die on return."""
+        hps = self.hps
         with torch.no_grad():
             y = torch.FloatTensor(audio).to(self.device)
             y = y.unsqueeze(0)
@@ -156,11 +174,7 @@ class ToneColorConverter(OpenVoiceBaseClass):
             spec_lengths = torch.LongTensor([spec.size(-1)]).to(self.device)
             audio = self.model.voice_conversion(spec, spec_lengths, sid_src=src_se, sid_tgt=tgt_se, tau=tau)[0][
                         0, 0].data.cpu().float().numpy()
-            audio = self.add_watermark(audio, message)
-            if output_path is None:
-                return audio
-            else:
-                soundfile.write(output_path, audio, hps.data.sampling_rate)
+            return audio
     
     def add_watermark(self, audio, message):
         if self.watermark_model is None:

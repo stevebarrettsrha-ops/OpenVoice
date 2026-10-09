@@ -1132,8 +1132,8 @@ function renderEngineStats() {
   $("gpuStats").innerHTML = cards.map(function (c) { return '<div class="stat"><div class="l">' + esc(c.l) + '</div><div class="v" title="' + esc(c.v) + '">' + esc(c.v) + '</div><div class="s">' + esc(c.s) + "</div></div>"; }).join("");
   var fit = $("fitNote");
   if (!g.present) fit.innerHTML = "No NVIDIA card was found, so everything runs on the CPU. It works, but a line takes a good while.";
-  else if (g.vram_total && g.vram_total < 3 * 1024 * 1024 * 1024) fit.innerHTML = '<span class="warn-text">This card has under 3 GB.</span> OpenVoice itself fits, but keep <b>Free GPU memory after each take</b> on and close other GPU programs.';
-  else fit.innerHTML = "OpenVoice is small: the converter and one base voice take <b>under 1 GB</b> of card memory, so an 8 GB card such as an RTX 4060 runs V1 and V2 with room to spare. The whole stack never needs more than about 2 GB.";
+  else if (g.vram_total && g.vram_total < 3 * 1024 * 1024 * 1024) fit.innerHTML = '<span class="warn-text">This card has under 3 GB.</span> GPU generation may not fit. Try CPU mode if it runs out of memory.';
+  else fit.innerHTML = "<b>8 GB VRAM is the target.</b> Peak memory depends on the language, MeloTTS BERT features, line length and other GPU programs. Keep <b>Free GPU memory after each take</b> on, then check the reported peak on a short take. Available memory does not guarantee a take will fit.";
   $("engState").textContent = ((st.engine || {}).state || "stopped") + ((st.engine || {}).state === "starting" ? " " + fmtTime((st.engine || {}).since || 0) : "");
   $("engState").className = "pill " + ((st.engine || {}).state === "ready" ? "ok" : (st.engine || {}).state === "error" ? "err" : "");
   var h = (st.engine || {}).hello || {};

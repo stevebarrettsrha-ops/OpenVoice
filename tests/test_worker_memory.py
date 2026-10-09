@@ -20,6 +20,23 @@ class Model:
 
 
 class WorkerMemory(unittest.TestCase):
+    def test_cpu_mode_avoids_cuda_allocator_when_a_card_is_available(self):
+        eng = worker.Engine()
+        cuda = types.SimpleNamespace(is_available=lambda: True)
+        methods = ("reset_peak_memory_stats", "max_memory_allocated", "empty_cache",
+                   "memory_allocated", "memory_reserved")
+        for name in methods:
+            setattr(cuda, name, mock.Mock(side_effect=AssertionError("CPU mode touched CUDA")))
+        eng.torch = types.SimpleNamespace(cuda=cuda)
+        eng.load_converter = mock.Mock(side_effect=worker.Cancelled())
+        with tempfile.TemporaryDirectory() as root, \
+             mock.patch.dict(sys.modules, {n: types.ModuleType(n) for n in ("librosa", "numpy", "soundfile")}):
+            with self.assertRaises(worker.Cancelled):
+                eng.speak({"out_dir": root, "lines": [{"text": "Hello"}]})
+        self.assertEqual(eng.status()["vram_used"], 0)
+        for name in methods:
+            getattr(cuda, name).assert_not_called()
+
     def test_success_releases_local_converter_before_collecting_memory(self):
         class Audio(list):
             def astype(self, dtype):

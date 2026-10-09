@@ -190,7 +190,7 @@ class Engine:
         out = {"device": self.device, "converter": self.converter_version,
                "v1": sorted(self.v1_tts), "v2": sorted(self.v2_tts),
                "busy": self.busy, "vram_used": 0, "vram_reserved": 0}
-        if torch is not None and torch.cuda.is_available():
+        if torch is not None and self.device.startswith("cuda") and torch.cuda.is_available():
             out["vram_used"] = int(torch.cuda.memory_allocated())
             out["vram_reserved"] = int(torch.cuda.memory_reserved())
         return out
@@ -290,7 +290,7 @@ class Engine:
     def empty_cache(self) -> None:
         import gc
         gc.collect()
-        if self.torch is not None and self.torch.cuda.is_available():
+        if self.torch is not None and self.device.startswith("cuda") and self.torch.cuda.is_available():
             self.torch.cuda.empty_cache()
 
     def unload(self) -> dict:
@@ -441,9 +441,9 @@ class Engine:
         self.busy = "speak"
         conv = src_se = tgt_se = None
         completed = False
-        if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
         try:
+            if self.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
             conv = self.load_converter(version, watermark)
             sr = int(conv.hps.data.sampling_rate)
             clips: list[np.ndarray] = []
@@ -470,7 +470,9 @@ class Engine:
                     tgt_se = torch.load(str(se_path), map_location=self.device)
                     with torch.no_grad():
                         conv.convert(audio_src_path=str(tmp), src_se=src_se, tgt_se=tgt_se,
-                                     output_path=str(final), tau=tau, message=message)
+                                     output_path=str(final), tau=tau, message=message,
+                                     check_cancel=self.check_cancel)
+                    self.check_cancel()
                 else:
                     # Base voice only — still resampled to the converter's rate so
                     # every line in the take shares one sample rate.
@@ -499,7 +501,7 @@ class Engine:
                 f"in {elapsed:.1f}s")
             result = {"file": str(take), "lines": files, "seconds": round(len(full) / sr, 2),
                       "sample_rate": sr, "elapsed": round(elapsed, 1)}
-            if torch.cuda.is_available():
+            if self.device.startswith("cuda") and torch.cuda.is_available():
                 result["vram_peak"] = int(torch.cuda.max_memory_allocated())
                 torch.cuda.reset_peak_memory_stats()
             completed = True

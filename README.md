@@ -86,19 +86,19 @@ cannot wedge it.
 
 ### Will it run on this card?
 
-Yes, on anything with a few GB. OpenVoice is small:
-
-| Resident on the card | Approximate |
-|---|---|
-| Tone colour converter (V1 or V2) | 0.3 GB |
-| One V1 base speaker, or one MeloTTS language | 0.3–0.5 GB |
-| Silero VAD (while a clip is being embedded) | tiny |
-| PyTorch's own CUDA context | 0.3–0.5 GB |
+8 GB is the target, not a measured guarantee for every language and take.
+The converter and base voice are only part of the total: MeloTTS also loads
+language-specific BERT feature models, while synthesis and conversion need
+temporary tensors. Other applications and the CUDA context consume memory
+too. The first short take on your installation is the useful check.
 
 The Engine page reads what the card actually has from `nvidia-smi` and says
 so. The engine keeps at most two MeloTTS languages loaded at once, so a script
 that walks through six languages never piles six models onto the card, and
 every take reports the peak card memory it used.
+Long lines are converted in overlapping 10-second windows, joined on the CPU,
+to bound the conversion stage's working memory. Short lines keep their
+single-call conversion. This does not bound MeloTTS's own sentence synthesis.
 
 ### Checkpoints: where they come from
 
@@ -226,6 +226,8 @@ BERT features. Close other GPU applications, shorten the failing line, and
 retry. A completed take with **Free GPU memory after each take** on now drops
 its local converter reference before collecting memory. Restart OpenVoice
 after updating so the old worker is replaced.
+With the saved device set to **auto**, launching with `OPENVOICE_DEVICE=cpu`
+now reaches the worker. An explicit saved CPU/CUDA setting takes precedence.
 
 **Out of memory on the CPU / very slow** — V2's MeloTTS is the heavy part on a
 CPU. V1 is lighter.
@@ -264,13 +266,18 @@ opening a tab. `OPENVOICE_STUDIO_DATA` moves `data/`.
 ## Tests
 
 ```bash
+python -m pip install -r requirements.txt numpy          # lightweight test dependencies
 python tests/check.py                                   # compiles, inline script parses
-python -m unittest discover -s tests -p 'test_*.py' -v  # 29 tests, Flask only
+python -m unittest discover -s tests -p 'test_*.py' -v     # 49 tests, no model weights
 ```
 
 `tests/mock_engine.py` stands in for `engine.py`, so the suite needs no
 PyTorch, no checkpoints and no card, and runs against a temporary data folder.
 Both run in CI on every push and pull request.
+`python tests/smoke_converter_cpu.py` additionally checks real conversion
+tensor shapes with a small random model. It needs CPU PyTorch, NumPy, librosa
+and soundfile, and downloads no weights. It does not establish audio quality
+or the peak memory of a trained model on a GPU.
 
 ## Licence and credit
 
