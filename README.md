@@ -3,8 +3,10 @@
 A local voice-cloning studio built on [OpenVoice](https://github.com/myshell-ai/OpenVoice)
 by MyShell. Drop in a short clip of a voice, write a script, press Read, and it
 is spoken in that voice on your own machine — no account, no upload, no
-per-word billing. Runs comfortably on an **RTX 4060 with 8 GB**: the whole
-stack needs about 2 GB of card memory at its busiest.
+per-word billing. **8 GB VRAM is the target**, but peak memory depends on
+language, line length, reference audio, and other programs using the card.
+The memory fixes below have CPU regression coverage; a complete synthesis
+on a real 8 GB GPU is still required to confirm your installation.
 
 Two versions of OpenVoice, switched from the Create page:
 
@@ -78,25 +80,25 @@ cannot wedge it.
 - ffmpeg, for mp3/m4a reference clips (wav and flac need nothing). The
   Engine page installs a static build into the app's `tools/` folder with
   one button; a system ffmpeg on PATH works too.
-- An NVIDIA card with 8 GB runs everything here with room to spare. Less
-  works with **Free GPU memory after each take** on. No card works too, on
-  the CPU, slowly.
+- An NVIDIA card with 8 GB is the target. **Free GPU memory after each take**
+  defaults on for new installations. Existing saved choices are preserved.
+  CPU mode is available with `OPENVOICE_DEVICE=cpu`, but is slower.
 
 ### Will it run on this card?
 
-Yes, on anything with a few GB. OpenVoice is small:
-
-| Resident on the card | Approximate |
-|---|---|
-| Tone colour converter (V1 or V2) | 0.3 GB |
-| One V1 base speaker, or one MeloTTS language | 0.3–0.5 GB |
-| Silero VAD (while a clip is being embedded) | tiny |
-| PyTorch's own CUDA context | 0.3–0.5 GB |
+8 GB is the target, not a measured guarantee for every language and take.
+The converter and base voice are only part of the total: MeloTTS also loads
+language-specific BERT feature models, while synthesis and conversion need
+temporary tensors. Other applications and the CUDA context consume memory
+too. The first short take on your installation is the useful check.
 
 The Engine page reads what the card actually has from `nvidia-smi` and says
 so. The engine keeps at most two MeloTTS languages loaded at once, so a script
 that walks through six languages never piles six models onto the card, and
 every take reports the peak card memory it used.
+Long lines are converted in overlapping 10-second windows, joined on the CPU,
+to bound the conversion stage's working memory. Short lines keep their
+single-call conversion. This does not bound MeloTTS's own sentence synthesis.
 
 ### Checkpoints: where they come from
 
@@ -218,8 +220,14 @@ enforced 3.10/3.11. Close the app and run `run.bat` / `run.sh` again: it
 sets the old `.venv` aside, fetches 3.11 if the machine has none, and
 rebuilds.
 
-**"The card ran out of memory"** — rare on 8 GB, but another program may be
-holding most of it. Close it, or turn on Free GPU memory after each take.
+**"The card ran out of memory"** — failed takes now release their models,
+including MeloTTS's separate BERT caches. Language changes also release old
+BERT features. Close other GPU applications, shorten the failing line, and
+retry. A completed take with **Free GPU memory after each take** on now drops
+its local converter reference before collecting memory. Restart OpenVoice
+after updating so the old worker is replaced.
+With the saved device set to **auto**, launching with `OPENVOICE_DEVICE=cpu`
+now reaches the worker. An explicit saved CPU/CUDA setting takes precedence.
 
 **Out of memory on the CPU / very slow** — V2's MeloTTS is the heavy part on a
 CPU. V1 is lighter.
@@ -258,13 +266,18 @@ opening a tab. `OPENVOICE_STUDIO_DATA` moves `data/`.
 ## Tests
 
 ```bash
+python -m pip install -r requirements.txt numpy          # lightweight test dependencies
 python tests/check.py                                   # compiles, inline script parses
-python -m unittest discover -s tests -p 'test_*.py' -v  # 29 tests, Flask only
+python -m unittest discover -s tests -p 'test_*.py' -v     # 49 tests, no model weights
 ```
 
 `tests/mock_engine.py` stands in for `engine.py`, so the suite needs no
 PyTorch, no checkpoints and no card, and runs against a temporary data folder.
 Both run in CI on every push and pull request.
+`python tests/smoke_converter_cpu.py` additionally checks real conversion
+tensor shapes with a small random model. It needs CPU PyTorch, NumPy, librosa
+and soundfile, and downloads no weights. It does not establish audio quality
+or the peak memory of a trained model on a GPU.
 
 ## Licence and credit
 

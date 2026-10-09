@@ -95,6 +95,21 @@ def file_hash(path: Path) -> str:
     return h.hexdigest()[:16]
 
 
+def release_melo_bert() -> None:
+    """Melo keeps BERT weights outside its TTS objects, in module globals.
+
+    Only inspect modules already imported: importing a language here can
+    download its tokenizer. Clear both cache shapes used by upstream Melo.
+    """
+    for name, module in tuple(sys.modules.items()):
+        if name.startswith("melo.text.") and name.endswith("_bert") and module:
+            if hasattr(module, "model"):
+                module.model = None
+            models = getattr(module, "models", None)
+            if isinstance(models, dict):
+                models.clear()
+
+
 class Cancelled(Exception):
     pass
 
@@ -109,6 +124,7 @@ class Engine:
         self.v1_tts: dict[str, object] = {}       # "EN"/"ZH" -> BaseSpeakerTTS
         self.v2_tts: dict[str, object] = {}       # melo language -> TTS
         self.vad = None
+        self.bert_language = ""
         self.cancel_flag = False
         self.busy = ""
 
@@ -174,7 +190,7 @@ class Engine:
         out = {"device": self.device, "converter": self.converter_version,
                "v1": sorted(self.v1_tts), "v2": sorted(self.v2_tts),
                "busy": self.busy, "vram_used": 0, "vram_reserved": 0}
-        if torch is not None and torch.cuda.is_available():
+        if torch is not None and self.device.startswith("cuda") and torch.cuda.is_available():
             out["vram_used"] = int(torch.cuda.memory_allocated())
             out["vram_reserved"] = int(torch.cuda.memory_reserved())
         return out
@@ -224,6 +240,12 @@ class Engine:
         return tts
 
     def v2_base(self, language: str):
+        # The language BERTs are not owned by the evicted TTS instances.
+        # Keep only the current language's feature models on the card.
+        if self.bert_language != language:
+            release_melo_bert()
+            self.bert_language = language
+            self.empty_cache()
         if language in self.v2_tts:
             return self.v2_tts[language]
         try:
@@ -268,7 +290,7 @@ class Engine:
     def empty_cache(self) -> None:
         import gc
         gc.collect()
-        if self.torch is not None and self.torch.cuda.is_available():
+        if self.torch is not None and self.device.startswith("cuda") and self.torch.cuda.is_available():
             self.torch.cuda.empty_cache()
 
     def unload(self) -> dict:
@@ -277,6 +299,8 @@ class Engine:
         self.v1_tts.clear()
         self.v2_tts.clear()
         self.vad = None
+        release_melo_bert()
+        self.bert_language = ""
         self.empty_cache()
         log("Everything unloaded; the card is free")
         return self.status()
@@ -415,7 +439,11 @@ class Engine:
 
         self.cancel_flag = False
         self.busy = "speak"
+        conv = src_se = tgt_se = None
+        completed = False
         try:
+            if self.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.reset_peak_memory_stats()
             conv = self.load_converter(version, watermark)
             sr = int(conv.hps.data.sampling_rate)
             clips: list[np.ndarray] = []
@@ -442,7 +470,9 @@ class Engine:
                     tgt_se = torch.load(str(se_path), map_location=self.device)
                     with torch.no_grad():
                         conv.convert(audio_src_path=str(tmp), src_se=src_se, tgt_se=tgt_se,
-                                     output_path=str(final), tau=tau, message=message)
+                                     output_path=str(final), tau=tau, message=message,
+                                     check_cancel=self.check_cancel)
+                    self.check_cancel()
                 else:
                     # Base voice only — still resampled to the converter's rate so
                     # every line in the take shares one sample rate.
@@ -471,13 +501,17 @@ class Engine:
                 f"in {elapsed:.1f}s")
             result = {"file": str(take), "lines": files, "seconds": round(len(full) / sr, 2),
                       "sample_rate": sr, "elapsed": round(elapsed, 1)}
-            if torch.cuda.is_available():
+            if self.device.startswith("cuda") and torch.cuda.is_available():
                 result["vram_peak"] = int(torch.cuda.max_memory_allocated())
                 torch.cuda.reset_peak_memory_stats()
-            if opts.get("free_after"):
-                self.unload()
+            completed = True
             return result
         finally:
+            # Drop local references before empty_cache. Clearing only the
+            # Engine attributes leaves the converter alive in this frame.
+            conv = src_se = tgt_se = None
+            if opts.get("free_after") or not completed:
+                self.unload()
             self.busy = ""
 
 
@@ -540,11 +574,17 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             text = str(exc) or exc.__class__.__name__
             if "out of memory" in text.lower():
-                eng.empty_cache()
-                text = ("The card ran out of memory. Turn on 'Free GPU memory after "
-                        "each take', close other GPU programs, or read fewer lines "
-                        f"at once. ({text.splitlines()[0]})")
-            log("".join(traceback.format_exception(exc)).rstrip())
+                # Clear unwound model frames as well as the owner's caches.
+                # A traceback can otherwise retain the failed CUDA tensors.
+                log("".join(traceback.format_exception(exc)).rstrip())
+                traceback.clear_frames(exc.__traceback__)
+                eng.unload()
+                text = ("The card ran out of memory; the worker released its "
+                        "loaded models. Close other GPU programs or shorten the "
+                        "failing line, then retry. CPU mode is available through "
+                        f"OPENVOICE_DEVICE=cpu. ({text.splitlines()[0]})")
+            else:
+                log("".join(traceback.format_exception(exc)).rstrip())
             send({"id": rid, "ok": False, "error": text})
     log("Worker stopped")
 

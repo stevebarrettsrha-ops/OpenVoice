@@ -53,6 +53,9 @@ Studio), where each was a fault that shipped:
 
 ## Gate before pushing
 
+Install `requirements.txt` and NumPy for the signal-assembly tests; the normal
+gate still needs no PyTorch or model checkpoints.
+
 ```
 python tests/check.py
 python -m unittest discover -s tests -p 'test_*.py'

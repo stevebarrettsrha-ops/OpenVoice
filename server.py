@@ -155,8 +155,8 @@ class EngineProcess:
             dev = cfg.get("device", "auto")
             if dev in ("cpu", "cuda"):
                 env["OPENVOICE_DEVICE"] = dev
-            else:
-                env.pop("OPENVOICE_DEVICE", None)
+            # Auto honors an explicit launcher environment override. Removing
+            # it here made the documented CPU fallback silently run on CUDA.
             self.note(f"Starting the engine: {sys.executable} {ENGINE_SCRIPT.name}")
             self.proc = subprocess.Popen(
                 [sys.executable, str(ENGINE_SCRIPT)], cwd=str(APP_DIR), env=env,
@@ -550,7 +550,7 @@ def submit_job(payload: dict) -> dict:
                "pause": float(opts.get("pause", cfg.get("pause", 0.35))),
                "tau": float(opts.get("tau", cfg.get("tau", 0.3))),
                "watermark": bool(opts.get("watermark", cfg.get("watermark", False))),
-               "free_after": bool(opts.get("free_after", cfg.get("free_after", False))),
+               "free_after": bool(opts.get("free_after", cfg.get("free_after", True))),
            }, "title": str(payload.get("title") or "")[:80]}}
     with _job_lock:
         JOBS[job["id"]] = job

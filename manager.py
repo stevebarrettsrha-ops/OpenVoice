@@ -51,7 +51,7 @@ def ensure_tools_path() -> None:
 DEFAULT_CONFIG = {
     "version": "v2",            # which OpenVoice the Create page uses
     "watermark": False,         # wavmark watermark on every take
-    "free_after": False,        # drop the models from the card after each take
+    "free_after": True,         # conservative default for the 8 GB target
     "pause": 0.35,              # seconds between lines
     "tau": 0.3,                 # converter temperature
     "device": "auto",           # auto | cuda | cpu
@@ -79,7 +79,7 @@ MODELS = {
                  "English (5 accents), Spanish, French, Chinese, Japanese and "
                  "Korean. The base voices themselves come from MeloTTS.",
         "size": "about 140 MB",
-        "vram": "under 1 GB with one MeloTTS voice loaded",
+        "vram": "depends on Melo language, BERT features and line length; 8 GB target",
     },
     "v1": {
         "label": "OpenVoice V1",

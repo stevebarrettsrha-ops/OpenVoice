@@ -57,7 +57,8 @@ def main():
             # MOCK_ENGINE_SLOW_HELLO=<seconds>: a PyTorch import that crawls
             time.sleep(float(os.environ.get("MOCK_ENGINE_SLOW_HELLO", "0") or 0))
             send({"id": rid, "ok": True, "result": {"torch": "0.0-mock", "cuda": False,
-                                                    "device": "cpu", "gpu": "", "melo": True}})
+                                                    "device": "cpu", "gpu": "", "melo": True,
+                                                    "device_override": os.environ.get("OPENVOICE_DEVICE", "")}})
         elif cmd == "status":
             send({"id": rid, "ok": True, "result": {"device": "cpu", "converter": "v2",
                                                     "vram_used": 0}})

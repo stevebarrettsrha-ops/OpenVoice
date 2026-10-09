@@ -18,6 +18,7 @@ import unittest
 import wave
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
@@ -247,6 +248,15 @@ class EngineProtocol(unittest.TestCase):
             self.assertAlmostEqual(w.getnframes() / w.getframerate(), 1.1, places=2)
         e.stop()
         self.assertEqual(e.state, "stopped")
+
+    def test_auto_device_honors_cpu_environment_but_explicit_setting_wins(self):
+        with mock.patch.dict(os.environ, {"OPENVOICE_DEVICE": "cpu"}):
+            for configured, expected in (("auto", "cpu"), ("cuda", "cuda")):
+                with self.subTest(configured=configured), \
+                     mock.patch.dict(server.cfg, {"device": configured}):
+                    server.ENGINE.start()
+                    self.assertEqual(server.ENGINE.hello["device_override"], expected)
+                    server.ENGINE.stop()
 
     def test_engine_error_is_raised_not_swallowed(self):
         os.environ["MOCK_ENGINE_FAIL"] = "speak"
