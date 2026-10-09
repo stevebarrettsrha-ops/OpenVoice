@@ -38,10 +38,17 @@ studio is the files around it.
 **Windows** — double-click `run.bat`
 **macOS / Linux** — `./run.sh`
 
-Either one finds a Python 3.10+ (preferring 3.11), offers to install one if
-there is none, puts Flask into a `.venv` beside the script — never into the
-Python it found — and starts the server. The browser opens at
+Either one gives the app **its own Python 3.11 or 3.10**: it uses one that
+is already installed, and when the machine has none (or only 3.12+) it
+fetches a managed CPython 3.11 through [uv](https://github.com/astral-sh/uv)
+into the app's folders, without touching the system Python. Flask goes into a
+`.venv` built from it, and the server starts. The browser opens at
 <http://127.0.0.1:7811>.
+
+A `.venv` made on 3.12 or newer by an earlier launch is set aside as
+`.venv-py3.12` and rebuilt, because MeloTTS cannot be installed into it (see
+Requirements); PyTorch and the packages then need installing again from the
+Engine page.
 
 The first launch takes seconds, because nothing heavy is installed yet. The
 Engine page then does the rest, one button each or **Install everything
@@ -62,10 +69,11 @@ cannot wedge it.
 
 ### Requirements
 
-- Python 3.10 or newer. **3.11 or 3.10 for V2**: MeloTTS pins `transformers`
-  4.27 and `tokenizers` 0.13, which have wheels for those two only. On 3.12+
-  the app and V1 work; MeloTTS will try to build from source and most likely
-  fail.
+- Python 3.10 or 3.11, which the launcher provides when the machine has
+  neither (any Python 3.8+ is enough to bootstrap that). The reason for the
+  ceiling: MeloTTS pins `transformers` 4.27 and `tokenizers` 0.13, which
+  have wheels for those two only; on 3.12+ it tries to build from source and
+  fails.
 - Git (pip fetches MeloTTS from GitHub).
 - ffmpeg, for mp3/m4a reference clips (wav and flac need nothing). The
   Engine page installs a static build into the app's `tools/` folder with
@@ -199,12 +207,16 @@ in `data/takes/`, voices in `data/voices/`, embeddings in `data/se/`.
 match the driver. Pick one by hand in the Engine page: cu128 needs driver
 570+, cu126 560+, cu121 is for older drivers. Update the driver if in doubt.
 
-**MeloTTS will not install** — almost always Python 3.12 or newer (the
-Python row on the Engine page says so). Run the app on 3.11: install it
-(`py install 3.11` on Windows, or python.org), delete the `.venv` folder,
-and run `run.bat` / `run.sh` again — the launchers prefer 3.11 when it is
-there, and on Windows `run.bat` offers to install it on a first run that
-finds only 3.12+.
+**"THESE PACKAGES DO NOT MATCH THE HASHES"** in an install log — pip's own
+download cache handed back a damaged copy of a wheel. The installer retries
+without the cache by itself; if you are installing by hand, add
+`--no-cache-dir`, or run `pip cache purge` once.
+
+**MeloTTS will not install** — the Python row on the Engine page is amber:
+the environment is on 3.12 or newer, from a launch before the launchers
+enforced 3.10/3.11. Close the app and run `run.bat` / `run.sh` again: it
+sets the old `.venv` aside, fetches 3.11 if the machine has none, and
+rebuilds.
 
 **"The card ran out of memory"** — rare on 8 GB, but another program may be
 holding most of it. Close it, or turn on Free GPU memory after each take.
@@ -226,7 +238,8 @@ of the Engine page, then restart the engine; or convert the clip to wav.
 ## Layout
 
 ```
-run.sh, run.bat         Launchers — find Python, build .venv, start server.py
+run.sh, run.bat         Launchers — find or fetch Python 3.11, build .venv, start server.py
+.uvenv/                 uv, used only to fetch a Python when the machine has no 3.10/3.11
 requirements.txt        Flask and requests: what the launchers install
 requirements-engine.txt What the Engine page installs on top of PyTorch
 server.py               Flask API — jobs, takes, voices, setup, the engine process

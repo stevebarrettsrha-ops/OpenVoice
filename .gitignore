@@ -16,3 +16,5 @@ build/
 *.zip
 node_modules/
 tools/
+.uvenv/
+.venv-py*/

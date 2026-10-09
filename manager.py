@@ -372,14 +372,19 @@ def torch_facts() -> dict:
 
 
 _torch_cache: dict = {"at": 0.0, "value": None}
+_torch_lock = threading.Lock()
 
 
 def torch_facts_cached(force: bool = False) -> dict:
-    now = time.time()
-    if force or _torch_cache["value"] is None or now - _torch_cache["at"] > 60:
-        _torch_cache["value"] = torch_facts()
-        _torch_cache["at"] = now
-    return _torch_cache["value"]
+    # One probe at a time: at boot the engine starter and the page's first
+    # status call both ask, and two concurrent `import torch` subprocesses
+    # double the wait on a cold disk for the same answer.
+    with _torch_lock:
+        now = time.time()
+        if force or _torch_cache["value"] is None or now - _torch_cache["at"] > 60:
+            _torch_cache["value"] = torch_facts()
+            _torch_cache["at"] = now
+        return _torch_cache["value"]
 
 
 def importable(mod: str) -> bool:
@@ -433,8 +438,11 @@ def deps(cfg: dict, fast: bool = False) -> list[dict]:
                 "state": "ok" if py["melo_ok"] else "warn",
                 "detail": f"{py['version']} at {py['executable']}" + (
                     "" if py["melo_ok"] else
-                    " — MeloTTS (V2 voices) pins packages that only build on "
-                    "3.10 or 3.11; V1 works here, V2 may not install"),
+                    " — MeloTTS (V2 voices) only installs on 3.10 or 3.11. Close "
+                    "this app and run run.bat / run.sh again: it sets Python 3.11 "
+                    "up in the app's own environment (fetched if the machine has "
+                    "none) and rebuilds .venv on it. PyTorch and the packages then "
+                    "need installing again from this page."),
                 "installable": False})
 
     ensure_tools_path()
@@ -531,14 +539,43 @@ def pip(task: Task, args: list[str]) -> int:
         task.log("Updating pip so downloads can show progress")
         run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
     extra = ["--progress-bar", "raw"] if pip_version() >= PIP_RAW_MIN else []
-    rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *extra, *args],
-                    pip_progress=bool(extra))
-    # A pip that does not know "raw" exits with "invalid choice" before doing
-    # anything; losing the bar is fine, losing the install is not.
-    if rc != 0 and extra and any("invalid choice: 'raw'" in l for l in task.lines[-5:]):
-        task.log("This pip has no raw progress mode; installing without a bar")
-        rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade", *args])
+    cache: list[str] = []
+    for attempt in range(3):
+        rc = run_logged(task, [sys.executable, "-m", "pip", "install", "--upgrade",
+                               *extra, *cache, *args], pip_progress=bool(extra))
+        if rc == 0:
+            return 0
+        why = pip_retry_reason(task.lines)
+        if why == "raw" and extra:
+            # A pip that does not know "raw" exits with "invalid choice" before
+            # doing anything; losing the bar is fine, losing the install is not.
+            task.log("This pip has no raw progress mode; installing without a bar")
+            extra = []
+        elif why == "cache" and not cache:
+            # pip refused a wheel because the copy in its own HTTP cache no
+            # longer matches the index's hash — a half-written cache entry, or
+            # something on the way (an antivirus, a proxy) rewrote it. The
+            # wheel itself is fine; fetching it fresh is the whole fix.
+            task.log("pip's cache handed back a file that does not match its hash; "
+                     "fetching fresh copies instead of the cache")
+            cache = ["--no-cache-dir"]
+        else:
+            return rc
     return rc
+
+
+def pip_retry_reason(lines: list[str]) -> str:
+    """What the last pip run tripped on, when it is something a retry fixes."""
+    tail = "\n".join(lines[-20:])
+    if "invalid choice: 'raw'" in tail:
+        return "raw"
+    if "DO NOT MATCH THE HASHES" in tail or "HashMismatch" in tail:
+        return "cache"
+    return ""
+
+
+def cfg_build() -> str:
+    return load_config().get("torch_build", "auto") or "auto"
 
 
 def install_torch(task: Task, build: str) -> None:
@@ -585,10 +622,25 @@ def install_melo(task: Task) -> None:
     if not shutil.which("git"):
         raise RuntimeError("git is not installed, and pip needs it to fetch MeloTTS. "
                            "Install Git from git-scm.com and try again.")
+    # MeloTTS lists torch and torchaudio with no build, so with no PyTorch in
+    # place pip would fetch PyPI's — the CPU build, on Windows. Put the right
+    # one in first; an installed build satisfies the requirement and stays.
+    before = torch_facts_cached(force=True)
+    if not before.get("installed") or before.get("error"):
+        task.log("PyTorch is not installed yet; installing it first so MeloTTS "
+                 "does not pull a CPU build")
+        install_torch(task, cfg_build())
     task.set(detail="Installing MeloTTS from GitHub")
     rc = pip(task, [MELO_GIT])
     if rc != 0:
         raise RuntimeError(f"pip exited with {rc}")
+    # Rule 5c from the sibling apps: check the build is still the one we want.
+    after = torch_facts_cached(force=True)
+    gpu = gpu_info()
+    if gpu.get("present") and after.get("installed") and not after.get("cuda"):
+        task.log(f"MeloTTS's dependencies replaced PyTorch with a CPU build "
+                 f"({after.get('version')}); putting the CUDA build back")
+        install_torch(task, cfg_build())
     # MeloTTS's English front end wants two NLTK corpora it fetches on first
     # use; doing it here means the first take does not stall on a download.
     task.set(detail="Fetching the NLTK data MeloTTS English needs")

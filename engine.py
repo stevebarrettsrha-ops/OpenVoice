@@ -28,6 +28,7 @@ Commands:
 
 from __future__ import annotations
 
+import faulthandler
 import hashlib
 import json
 import os
@@ -118,7 +119,25 @@ class Engine:
         if self.torch is None:
             log("Importing PyTorch (the first time on a machine can take a minute)")
             t0 = time.time()
-            import torch  # noqa: WPS433 - deliberately late
+            # While it runs, say so every 30 s, and after 90 s dump every
+            # thread's Python stack to the console: an import that is merely
+            # slow (antivirus reading 3 GB of DLLs) and one that is stuck look
+            # the same from outside, and the stack says which module it is in.
+            stop = threading.Event()
+
+            def heartbeat():
+                while not stop.wait(30):
+                    log(f"still importing PyTorch after {time.time() - t0:.0f}s "
+                        "(a first import on a slow disk or behind an antivirus "
+                        "can take several minutes)")
+
+            threading.Thread(target=heartbeat, daemon=True).start()
+            faulthandler.dump_traceback_later(90, repeat=True, file=sys.stderr)
+            try:
+                import torch  # noqa: WPS433 - deliberately late
+            finally:
+                stop.set()
+                faulthandler.cancel_dump_traceback_later()
             self.torch = torch
             log(f"PyTorch imported in {time.time() - t0:.1f}s")
             want = os.environ.get("OPENVOICE_DEVICE", "").strip().lower()

@@ -112,6 +112,7 @@ class EngineProcess:
         self.hello: dict = {}
         self.console: list[str] = []
         self.pending: dict[str, dict] = {}
+        self.channel_open = False           # the worker's ready line arrived
         self.lock = threading.RLock()       # one command in flight
         self.write_lock = threading.Lock()
         self.started = 0.0
@@ -141,6 +142,7 @@ class EngineProcess:
             if not ENGINE_SCRIPT.is_file():
                 raise EngineError(f"engine script missing: {ENGINE_SCRIPT}")
             self.state = "starting"
+            self.channel_open = False
             self.error = ""
             self.hello = {}
             env = dict(os.environ)
@@ -166,15 +168,17 @@ class EngineProcess:
             self._stderr_thread.start()
             threading.Thread(target=self._read_stdout, args=(self.proc,), daemon=True).start()
             deadline = time.time() + 30
-            while time.time() < deadline and self.state == "starting" and self.alive():
+            while time.time() < deadline and not self.channel_open and self.alive():
                 time.sleep(0.1)
             if not self.alive():
+                if self.state == "stopped":
+                    raise EngineError("The engine was stopped while starting")
                 self.state = "error"
                 self.error = self.error or ("The engine exited while starting. "
                                             + self.last_complaint())
                 self.note(self.error)
                 raise EngineError(self.error)
-            if self.state == "starting":
+            if not self.channel_open:
                 # Every failure here is written to the console: an engine that
                 # went "error" with nothing said is what this used to do.
                 self.note("No ready signal from the engine after 30 s; asking it anyway")
@@ -182,6 +186,8 @@ class EngineProcess:
             try:
                 self.hello = self.call("hello", timeout=300)
             except EngineError as exc:
+                if self.state == "stopped":
+                    raise EngineError("The engine was stopped while starting") from exc
                 self.state = "error"
                 self.error = str(exc)
                 if "did not answer" in self.error:
@@ -211,6 +217,16 @@ class EngineProcess:
         self._start_thread.start()
 
     def stop(self) -> None:
+        # An engine still in start() holds the lock while it waits for hello —
+        # up to five minutes if PyTorch's import crawls (first import on a
+        # slow disk with an antivirus reading 3 GB of DLLs). Stop must not
+        # queue behind that: kill the child first, which ends the wait, then
+        # take the lock for the tidy-up.
+        p = self.proc
+        if p is not None and p.poll() is None and self.state == "starting":
+            self.note("Stopping an engine that was still starting")
+            self.state = "stopped"
+            p.kill()
         with self.lock:
             p = self.proc
             if p is None:
@@ -267,7 +283,9 @@ class EngineProcess:
                 self.note(raw)
                 continue
             if msg.get("event") == "ready":
-                self.state = "ready"
+                # The channel is open; "ready" waits for hello, which is where
+                # PyTorch loads. Until then the state stays "starting".
+                self.channel_open = True
                 continue
             fut = self.pending.get(msg.get("id", ""))
             if fut is None:
@@ -288,6 +306,8 @@ class EngineProcess:
             fut["event"].set()
         if self.proc is proc:
             code = proc.poll()
+            if self.state == "starting" and code is None:
+                code = proc.wait(timeout=5)
             if self.state != "stopped":
                 self.state = "error"
                 self.error = f"The engine exited (code {code}). {self.last_complaint()}".strip()
@@ -683,7 +703,9 @@ def api_status():
     return jsonify({
         "python": manager.python_facts(), "gpu": gpu, "torch": tf or {},
         "models": models, "engine": {"state": ENGINE.state, "error": ENGINE.error,
-                                     "hello": ENGINE.hello, "live": live},
+                                     "hello": ENGINE.hello, "live": live,
+                                     "since": round(time.time() - ENGINE.started)
+                                     if ENGINE.alive() else 0},
         "config": {k: v for k, v in cfg.items() if k != "hf_token"},
         "has_token": bool(cfg.get("hf_token")),
         "jobs_running": len(running), "fits": fits,
