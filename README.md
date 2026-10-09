@@ -119,10 +119,32 @@ URL, if you have one, is tried first. **Import a zip or folder I already
 have** takes the original `checkpoints_1226.zip` / `checkpoints_v2_0417.zip`
 or an unpacked copy from disk, with or without the wrapping folder.
 
+Existing files in `checkpoints/` and `checkpoints_v2/` are loaded directly;
+starting the app or generating a take does not redownload them. Pressing
+**Download** also returns immediately when the full required set is present,
+even if a ZIP URL was saved. Otherwise it first copies missing files from the
+same model's cached HuggingFace `main` snapshot, preserving existing usable
+checkpoints and the shared cache. It honors `HF_HUB_CACHE`, the older
+`HUGGINGFACE_HUB_CACHE`, `HF_HOME`, and `XDG_CACHE_HOME`; the default cache is
+`~/.cache/huggingface/hub`. Only files still missing need a download. Empty
+files and Git LFS pointers do not count as downloaded models.
+
+There is no drive-wide relocation scan. Status and generation keep using the
+app's checkpoint folders; cache discovery happens only when **Download** is
+explicitly pressed and required files are missing. For files kept elsewhere,
+use **Import a zip or folder I already have** once. It copies them into these
+folders; choosing the same folder again safely reuses it. An interrupted
+`.part` download resumes; a complete one is reused without another request.
+
 MeloTTS downloads from HuggingFace on its own: a few tokenizers (a Japanese
 BERT among them) the first time it is imported, which the installer does for
 you as its last step, and the base-voice weights for each language the first
 time that language is used — about 200 MB each, kept in HuggingFace's cache.
+MeloTTS and Transformers reuse that cache; the app does not pass
+`force_download`. They may still check remote metadata or fetch missing
+language/BERT/tokenizer files. To run without network requests after all those
+assets are cached, set `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` before
+launching. This does not make an incomplete cache complete.
 
 ### Does it actually work?
 
