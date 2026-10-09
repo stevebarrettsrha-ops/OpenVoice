@@ -74,7 +74,9 @@ MODELS = {
         "strip": "checkpoints_v2/",
         "dir": CKPT["v2"],
         "key_files": ["converter/checkpoint.pth", "converter/config.json",
-                      "base_speakers/ses/en-default.pth"],
+                      *[f"base_speakers/ses/{speaker}.pth" for speaker in
+                        ("en-default", "en-us", "en-br", "en-india", "en-au",
+                         "en-newest", "es", "fr", "zh", "jp", "kr")]],
         "about": "Tone colour converter plus the base-speaker embeddings for "
                  "English (5 accents), Spanish, French, Chinese, Japanese and "
                  "Korean. The base voices themselves come from MeloTTS.",
@@ -404,10 +406,24 @@ def unidic_ready() -> bool:
         return False
 
 
+def usable_model_file(path: Path) -> bool:
+    """A completed file, not an empty download or an unpulled Git LFS pointer.
+
+    This is a cheap presence check, not checkpoint deserialization/integrity QA.
+    """
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        with path.open("rb") as source:
+            return not source.read(128).startswith(b"version https://git-lfs.github.com/spec/v1")
+    except OSError:
+        return False
+
+
 def model_state(key: str) -> dict:
     m = MODELS[key]
     d: Path = m["dir"]
-    missing = [f for f in m["key_files"] if not (d / f).is_file()]
+    missing = [f for f in m["key_files"] if not usable_model_file(d / f)]
     nbytes = 0
     nfiles = 0
     if d.is_dir():
@@ -766,18 +782,70 @@ def local_path(model: dict, repo_path: str) -> Path | None:
     return model["dir"] / rel
 
 
+def reuse_hf_cache(task: Task, key: str) -> int:
+    """Copy completed files from the cached main revision, without network I/O.
+
+    Keep app checkpoints independent of Hub cache eviction; never change the
+    shared cache or overwrite an existing usable app checkpoint. Cache layout
+    is the public HF refs/snapshots layout, so the app needs no heavy Hub import.
+    """
+    model = MODELS[key]
+    cache_home = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
+    hf_home = Path(os.environ.get("HF_HOME") or (cache_home / "huggingface"))
+    cache = Path(os.environ.get("HF_HUB_CACHE") or
+                 os.environ.get("HUGGINGFACE_HUB_CACHE") or (hf_home / "hub")).expanduser()
+    repo_dir = cache / ("models--" + model["repo"].replace("/", "--"))
+    try:
+        revision = (repo_dir / "refs" / "main").read_text(encoding="utf-8").strip()
+    except OSError:
+        return 0
+    # A ref is a commit hash, never a path supplied to traversal.
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", revision):
+        return 0
+    snapshot = repo_dir / "snapshots" / revision
+    count = 0
+    for rel in model["key_files"]:
+        if task.cancel:
+            break
+        dest = model["dir"] / rel
+        if usable_model_file(dest):
+            continue
+        # V1's Hub repo wraps its paths; V2 has no wrapper. Both layouts
+        # also occur in snapshots originally imported with a local tool.
+        for candidate in (snapshot / rel, snapshot / model["strip"] / rel):
+            if not usable_model_file(candidate):
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dest.with_name(dest.name + ".reuse.tmp")
+            try:
+                shutil.copyfile(candidate, tmp)
+                os.replace(tmp, dest)
+            finally:
+                tmp.unlink(missing_ok=True)
+            count += 1
+            task.log(f"Reused {rel} from {snapshot}")
+            break
+    return count
+
+
 def download_file(task: Task, url: str, dest: Path, headers: dict, size: int,
                   done_before: int, total: int) -> int:
     """Stream url into dest with resume. Returns bytes written this call."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_name(dest.name + ".part")
     have = part.stat().st_size if part.is_file() else 0
+    if size and have == size:
+        os.replace(part, dest)
+        return have
+    if size and have > size:
+        have = 0  # stale/corrupt partial: restart instead of requesting an invalid range
     hdr = dict(headers)
     if have:
         hdr["Range"] = f"bytes={have}-"
     with requests.get(url, headers=hdr, stream=True, timeout=60) as r:
-        if r.status_code == 416:            # the .part is already complete
-            pass
+        if r.status_code == 416:
+            raise RuntimeError(f"Server rejected the resume range for {dest.name}; "
+                               "the partial download was retained, not marked complete")
         else:
             r.raise_for_status()
             if r.status_code != 206:
@@ -797,12 +865,23 @@ def download_file(task: Task, url: str, dest: Path, headers: dict, size: int,
                         task.set(pct=pct, detail=f"{dest.name}  "
                                  f"{written / 1e6:.0f}/{size / 1e6:.0f} MB")
             have = written
+    if size and have != size:
+        raise RuntimeError(f"Incomplete download for {dest.name}: expected {size} bytes, "
+                           f"received {have}; the partial file will resume next time")
     os.replace(part, dest)
     return have
 
 
 def download_model(task: Task, key: str, cfg: dict) -> None:
     model = MODELS[key]
+    if not model_state(key)["present"]:
+        reuse_hf_cache(task, key)
+    if task.cancel:
+        return
+    if model_state(key)["present"]:
+        task.set(pct=100, detail=f"{model['label']} ready")
+        task.log("All required checkpoints are already on disk; no download needed")
+        return
     zip_url = (cfg.get("zip_urls") or {}).get(key, "").strip()
     if zip_url:
         task.log(f"Trying the zip first: {zip_url}")
@@ -822,10 +901,13 @@ def download_model(task: Task, key: str, cfg: dict) -> None:
         dest = local_path(model, f["path"])
         if dest is None:
             continue
-        if dest.is_file() and (f["size"] == 0 or dest.stat().st_size == f["size"]):
+        if usable_model_file(dest) and (f["size"] == 0 or dest.stat().st_size == f["size"]):
             continue
         plan.append((f, dest))
     if not plan:
+        missing = model_state(key)["missing"]
+        if missing:
+            raise RuntimeError("The model listing did not supply required files: " + ", ".join(missing))
         task.log("Everything is already on disk")
         return
     total = sum(f["size"] for f, _ in plan)
@@ -921,8 +1003,11 @@ def import_local(task: Task, key: str, path: str) -> None:
             if (cand / "converter" / "checkpoint.pth").is_file():
                 src = cand
                 break
-        task.log(f"Copying {src} into {model['dir'].name}/")
-        shutil.copytree(src, model["dir"], dirs_exist_ok=True)
+        if src.resolve() == model["dir"].resolve():
+            task.log(f"Using the existing checkpoints in {src}")
+        else:
+            task.log(f"Copying {src} into {model['dir'].name}/")
+            shutil.copytree(src, model["dir"], dirs_exist_ok=True)
     else:
         raise RuntimeError(f"{p} is neither a zip nor a folder")
     st = model_state(key)
