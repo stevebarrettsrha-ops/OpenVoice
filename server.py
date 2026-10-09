@@ -550,7 +550,7 @@ def submit_job(payload: dict) -> dict:
                "pause": float(opts.get("pause", cfg.get("pause", 0.35))),
                "tau": float(opts.get("tau", cfg.get("tau", 0.3))),
                "watermark": bool(opts.get("watermark", cfg.get("watermark", False))),
-               "free_after": bool(opts.get("free_after", cfg.get("free_after", False))),
+               "free_after": bool(opts.get("free_after", cfg.get("free_after", True))),
            }, "title": str(payload.get("title") or "")[:80]}}
     with _job_lock:
         JOBS[job["id"]] = job

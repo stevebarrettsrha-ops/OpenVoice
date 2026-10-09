@@ -51,7 +51,7 @@ def ensure_tools_path() -> None:
 DEFAULT_CONFIG = {
     "version": "v2",            # which OpenVoice the Create page uses
     "watermark": False,         # wavmark watermark on every take
-    "free_after": False,        # drop the models from the card after each take
+    "free_after": True,         # conservative default for the 8 GB target
     "pause": 0.35,              # seconds between lines
     "tau": 0.3,                 # converter temperature
     "device": "auto",           # auto | cuda | cpu

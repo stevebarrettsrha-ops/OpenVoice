@@ -3,8 +3,10 @@
 A local voice-cloning studio built on [OpenVoice](https://github.com/myshell-ai/OpenVoice)
 by MyShell. Drop in a short clip of a voice, write a script, press Read, and it
 is spoken in that voice on your own machine — no account, no upload, no
-per-word billing. Runs comfortably on an **RTX 4060 with 8 GB**: the whole
-stack needs about 2 GB of card memory at its busiest.
+per-word billing. **8 GB VRAM is the target**, but peak memory depends on
+language, line length, reference audio, and other programs using the card.
+The memory fixes below have CPU regression coverage; a complete synthesis
+on a real 8 GB GPU is still required to confirm your installation.
 
 Two versions of OpenVoice, switched from the Create page:
 
@@ -78,9 +80,9 @@ cannot wedge it.
 - ffmpeg, for mp3/m4a reference clips (wav and flac need nothing). The
   Engine page installs a static build into the app's `tools/` folder with
   one button; a system ffmpeg on PATH works too.
-- An NVIDIA card with 8 GB runs everything here with room to spare. Less
-  works with **Free GPU memory after each take** on. No card works too, on
-  the CPU, slowly.
+- An NVIDIA card with 8 GB is the target. **Free GPU memory after each take**
+  defaults on for new installations. Existing saved choices are preserved.
+  CPU mode is available with `OPENVOICE_DEVICE=cpu`, but is slower.
 
 ### Will it run on this card?
 
@@ -218,8 +220,12 @@ enforced 3.10/3.11. Close the app and run `run.bat` / `run.sh` again: it
 sets the old `.venv` aside, fetches 3.11 if the machine has none, and
 rebuilds.
 
-**"The card ran out of memory"** — rare on 8 GB, but another program may be
-holding most of it. Close it, or turn on Free GPU memory after each take.
+**"The card ran out of memory"** — failed takes now release their models,
+including MeloTTS's separate BERT caches. Language changes also release old
+BERT features. Close other GPU applications, shorten the failing line, and
+retry. A completed take with **Free GPU memory after each take** on now drops
+its local converter reference before collecting memory. Restart OpenVoice
+after updating so the old worker is replaced.
 
 **Out of memory on the CPU / very slow** — V2's MeloTTS is the heavy part on a
 CPU. V1 is lighter.
