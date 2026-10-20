@@ -2,6 +2,38 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Started from the file manager (right-click → Run as a Program) there is no
+# terminal: nothing this script says can be seen, and a failure just looks like
+# nothing happening. On a Linux desktop, open a terminal and run in it instead.
+if [ "$(uname)" = "Linux" ] && [ -z "${OPENVOICE_STUDIO_IN_TERMINAL:-}" ] \
+   && [ ! -t 0 ] && [ ! -t 1 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+  export OPENVOICE_STUDIO_IN_TERMINAL=1
+  SELF="$(pwd)/$(basename "$0")"
+  for term in gnome-terminal ptyxis kgx konsole xfce4-terminal mate-terminal \
+              tilix x-terminal-emulator xterm; do
+    command -v "$term" >/dev/null 2>&1 || continue
+    case "$term" in
+      gnome-terminal|ptyxis|kgx) "$term" -- bash "$SELF" && exit 0 ;;
+      xfce4-terminal|mate-terminal) "$term" -x bash "$SELF" && exit 0 ;;
+      *) "$term" -e bash "$SELF" && exit 0 ;;
+    esac
+  done
+  # No terminal found: carry on without one. The page still opens.
+fi
+
+# In a window we opened, keep it open on failure so the reason can be read.
+# That is also why the server is not started with exec at the end: exec would
+# drop this trap.
+pause_on_error() {
+  local code=$?
+  if [ -n "${OPENVOICE_STUDIO_IN_TERMINAL:-}" ] && [ "$code" -ne 0 ] \
+     && [ "$code" -ne 130 ] && [ -t 0 ]; then
+    printf "\n  OpenVoice Studio stopped (exit code %s). Press Enter to close." "$code"
+    read -r _ || true
+  fi
+}
+trap pause_on_error EXIT
+
 # OpenVoice Studio runs on Python 3.10 or 3.11, in its own environment.
 #
 # MeloTTS (OpenVoice V2's base voices) pins packages that have wheels for
@@ -110,4 +142,4 @@ fi
 echo "  Environment: Python $(version_of "$VENV/bin/python") in $VENV"
 "$VENV/bin/python" -m pip install --disable-pip-version-check --quiet \
     -r requirements.txt
-exec "$VENV/bin/python" server.py
+"$VENV/bin/python" server.py

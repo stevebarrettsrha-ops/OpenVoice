@@ -38,7 +38,15 @@ studio is the files around it.
 ## Running it
 
 **Windows** — double-click `run.bat`
-**macOS / Linux** — `./run.sh`
+**macOS / Linux** — open a terminal in this folder and run `./run.sh`
+
+On Linux, double-clicking `run.sh` in the file manager opens it in a text
+editor — that is the file manager's choice, not a fault. Right-click it and
+pick **Run as a Program** instead; it opens a terminal and runs there. If a
+terminal answers `Permission denied` (an unzip can drop the executable bit),
+run `bash run.sh`, or `chmod +x run.sh` once. On Debian and Ubuntu the first
+run may also need `sudo apt-get install -y python3-venv`; the script says so
+when it is missing, and picks up where it stopped once it is installed.
 
 Either one gives the app **its own Python 3.11 or 3.10**: it uses one that
 is already installed, and when the machine has none (or only 3.12+) it
