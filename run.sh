@@ -57,6 +57,30 @@ WANT_MAX="3.11"
 VENV=".venv"
 UVENV=".uvenv"          # a tiny venv whose only job is to hold uv
 
+# A folder first set up on Windows (a drive both systems share) carries the
+# Windows .venv and .uvenv: Scripts/python.exe, and a pyvenv.cfg whose home
+# is a C:\ path. Nothing in them can run here — the old check read that as
+# "incomplete" and deleted them, which broke the app for Windows. A venv
+# cannot serve both systems, so this one gets its own beside it
+# (.venv-linux, .venv-darwin) and the Windows one is left as it is.
+built_on_windows() {     # a venv made by a Windows Python
+  [ -d "$1" ] || return 1
+  if [ -e "$1/Scripts/python.exe" ] && [ ! -e "$1/bin/python" ]; then
+    return 0
+  fi
+  [ -f "$1/pyvenv.cfg" ] && grep -Eqi '^home *= *[a-z]:[\\/]' "$1/pyvenv.cfg"
+}
+OS_SUFFIX="$(uname -s | tr '[:upper:]' '[:lower:]')"
+if built_on_windows "$VENV"; then
+  echo "  $VENV was built on Windows; it is left as it is and this system"
+  echo "  uses $VENV-$OS_SUFFIX (PyTorch and the packages install into it from"
+  echo "  the Engine page)."
+  VENV="$VENV-$OS_SUFFIX"
+fi
+if built_on_windows "$UVENV"; then
+  UVENV="$UVENV-$OS_SUFFIX"
+fi
+
 version_of() {           # prints "3.11" for an interpreter, or nothing
   "$1" -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null || true
 }

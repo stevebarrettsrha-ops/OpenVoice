@@ -40,7 +40,8 @@ def compiles(paths):
 
 
 step("python modules compile", compiles(["server.py", "manager.py", "engine.py"]))
-step("test helpers compile", compiles(["tests/mock_engine.py", "tests/test_units.py"]))
+step("test helpers compile", compiles(["tests/mock_engine.py", "tests/test_units.py",
+                                       "tests/test_launcher.py"]))
 step("openvoice package compiles", compiles([str(p.relative_to(REPO))
                                              for p in (REPO / "openvoice").rglob("*.py")]))
 
