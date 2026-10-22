@@ -23,6 +23,17 @@ set "UVENV=.uvenv"
 set "USE_UV="
 set "PY="
 
+rem A folder first set up on Linux or macOS (a drive both systems share)
+rem carries that system's .venv and .uvenv: bin/python and no
+rem Scripts\python.exe, or a pyvenv.cfg whose home is a / path. Nothing in
+rem them runs here, and rebuilding over them would break the app on the other
+rem system, so Windows gets its own beside them and they are left as they are.
+call :otheros "%VENV%"
+if defined OTHER echo   %VENV% was built on another system; it is left as it is and Windows uses %VENV%-windows.
+if defined OTHER set "VENV=%VENV%-windows"
+call :otheros "%UVENV%"
+if defined OTHER set "UVENV=%UVENV%-windows"
+
 if defined OPENVOICE_STUDIO_FORCE_UV goto needuv
 call :findwanted
 if defined PY goto haspy
@@ -143,4 +154,12 @@ for %%C in ("py -3" "python" "py -3.13" "py -3.12" "py -3.11" "py -3.10" "py -3.
     if !errorlevel! equ 0 set "BOOT=%%~C"
   )
 )
+exit /b 0
+
+rem Sets OTHER when the venv folder %1 was made by another system's Python.
+:otheros
+set "OTHER="
+if not exist "%~1\" exit /b 0
+if not exist "%~1\Scripts\python.exe" if exist "%~1\bin\" set "OTHER=1"
+if exist "%~1\pyvenv.cfg" findstr /r /b /c:"home *= */" "%~1\pyvenv.cfg" >nul 2>nul && set "OTHER=1"
 exit /b 0

@@ -50,6 +50,17 @@ Studio), where each was a fault that shipped:
 12. **The gate checks element ids.** `tests/check.py` lists every id the
     inline script asks for and fails on one the markup lacks — the mismatch
     that killed every button silently in two sibling apps.
+13. **A venv built on the other system is left alone, never rebuilt over.**
+    An app folder on a drive shared by Windows and Linux carries the other
+    system's `.venv` and `.uvenv` (`Scripts/python.exe`, or a `pyvenv.cfg`
+    whose `home` is a `C:\` / `/` path). Nothing in it can run here, and
+    `run.sh` used to read it as "incomplete" and delete it, which broke the
+    app for Windows. Each launcher uses a sibling instead — `.venv-linux`
+    (`-darwin`) from `run.sh`, `.venv-windows` from `run.bat` — and
+    `tests/test_launcher.py` runs the real `run.sh` against one. The server
+    only ever runs `sys.executable`, and `tools/ffmpeg` vs `tools/ffmpeg.exe`
+    never answer for each other, so nothing past the launcher can pick up the
+    other system's binaries.
 
 ## Gate before pushing
 

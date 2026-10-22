@@ -60,6 +60,12 @@ A `.venv` made on 3.12 or newer by an earlier launch is set aside as
 Requirements); PyTorch and the packages then need installing again from the
 Engine page.
 
+An app folder on a drive both Windows and Linux use keeps one environment per
+system: a `.venv` built on Windows is left as it is, and `run.sh` builds
+`.venv-linux` beside it (`run.bat` likewise builds `.venv-windows` beside one
+made on Linux or macOS). PyTorch and the packages install into each once,
+from the Engine page on that system.
+
 The first launch takes seconds, because nothing heavy is installed yet. The
 Engine page then does the rest, one button each or **Install everything
 missing**:
